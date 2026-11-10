@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-10T16:17:52.779Z",
+  "updatedAt": "2026-11-10T16:30:26.977Z",
   "targets": [
     {
       "id": "image",
@@ -96,6 +96,25 @@
       "animationFrames": null,
       "createdAt": "2026-11-10T16:17:52.778Z",
       "notice": "The animation is 436×388 but the image is 1536×2048; it will be stretched to fill the print."
+    },
+    {
+      "id": "capturedamprsquoampeacutecran2026-11-10ampagrave",
+      "title": "Capturedamprsquoampeacutecran2026 11 10ampagrave11.33.31",
+      "image": "assets/targets/capturedamprsquoampeacutecran2026-11-10ampagrave/image.jpg",
+      "animation": "assets/targets/capturedamprsquoampeacutecran2026-11-10ampagrave/animation.gif",
+      "edges": "assets/targets/capturedamprsquoampeacutecran2026-11-10ampagrave/edges.png",
+      "marker": "assets/targets/capturedamprsquoampeacutecran2026-11-10ampagrave/marker",
+      "width": 1616,
+      "height": 1540,
+      "dpi": 72,
+      "widthMm": 570.089,
+      "heightMm": 543.278,
+      "autoAnimation": false,
+      "animationWidth": 250,
+      "animationHeight": 250,
+      "animationFrames": null,
+      "createdAt": "2026-11-10T16:30:26.977Z",
+      "notice": "The animation is 250×250 but the image is 1616×1540; it will be stretched to fill the print."
     }
   ]
 }
