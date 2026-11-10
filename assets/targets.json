@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-10T16:15:27.396Z",
+  "updatedAt": "2026-11-10T16:17:52.779Z",
   "targets": [
     {
       "id": "image",
@@ -58,6 +58,44 @@
       "animationFrames": null,
       "createdAt": "2026-11-10T16:15:27.395Z",
       "notice": "The animation is 438×385 but the image is 2048×1536; it will be stretched to fill the print."
+    },
+    {
+      "id": "img-4349-jpg",
+      "title": "IMG 4349.jpg",
+      "image": "assets/targets/img-4349-jpg/image.jpg",
+      "animation": "assets/targets/img-4349-jpg/animation.gif",
+      "edges": "assets/targets/img-4349-jpg/edges.png",
+      "marker": "assets/targets/img-4349-jpg/marker",
+      "width": 959,
+      "height": 1280,
+      "dpi": 72,
+      "widthMm": 338.314,
+      "heightMm": 451.556,
+      "autoAnimation": false,
+      "animationWidth": 439,
+      "animationHeight": 389,
+      "animationFrames": null,
+      "createdAt": "2026-11-10T16:17:37.121Z",
+      "notice": "The animation is 439×389 but the image is 959×1280; it will be stretched to fill the print."
+    },
+    {
+      "id": "porte",
+      "title": "porte",
+      "image": "assets/targets/porte/image.jpg",
+      "animation": "assets/targets/porte/animation.gif",
+      "edges": "assets/targets/porte/edges.png",
+      "marker": "assets/targets/porte/marker",
+      "width": 1536,
+      "height": 2048,
+      "dpi": 72,
+      "widthMm": 541.867,
+      "heightMm": 722.489,
+      "autoAnimation": false,
+      "animationWidth": 436,
+      "animationHeight": 388,
+      "animationFrames": null,
+      "createdAt": "2026-11-10T16:17:52.778Z",
+      "notice": "The animation is 436×388 but the image is 1536×2048; it will be stretched to fill the print."
     }
   ]
 }
