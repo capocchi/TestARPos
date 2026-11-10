@@ -519,7 +519,7 @@ input[type="range"] {
 .loader-bg {
     position: absolute;
     inset: -60px;
-    background-image: url("photo-iut.jpg");
+    background-color: #04070b;
     background-size: cover;
     background-position: center;
     filter: blur(42px) brightness(0.34) saturate(0.85);

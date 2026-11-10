@@ -1,1 +1,9 @@
 ﻿opencode.json
+node_modules/
+.tmp/
+backoffice/
+lib/
+
+server.js
+package-lock.json
+package.json

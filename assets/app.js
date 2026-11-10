@@ -16,12 +16,13 @@
     }
 
     /* ------------------------------------------------------------------
-     * Asset URLs. Absolute URLs keep the NFT worker happy when the site is
-     * hosted in a sub-folder (e.g. GitHub Pages /ar/).
+     * Target manifest
+     * ------------------------------------------------------------------
+     * Every scannable couple lives in assets/targets/<id>/ and is listed in
+     * assets/targets.json. The backoffice writes both; the AR app only reads
+     * them, so the experience keeps working on a plain static host.
      * ------------------------------------------------------------------ */
-    var PHOTO_URL = new URL('assets/photo-iut.jpg', document.baseURI).href;
-    var EDGES_URL = new URL('assets/photo-iut-edges.png', document.baseURI).href;
-    var GIF_URL = new URL('assets/Mural_STUDIA_LIBERTA_en_animation.gif', document.baseURI).href;
+    var MANIFEST_URL = new URL('assets/targets.json', document.baseURI).href;
 
     /*
      * AR.js's NFT worker resolves a marker path against self.origin and only
@@ -35,16 +36,22 @@
     var hostname = window.location.hostname;
     var looksLikeDomain = hostname.indexOf('.') !== -1 &&
         !/^[\d.]+$/.test(hostname);
-    var MARKER_URL = looksLikeDomain
-        ? new URL('assets/nft/photo-iut', document.baseURI).href
-        : 'assets/nft/photo-iut';
 
-    var nftEl = document.getElementById('mural-target');
-    var overlayEl = document.getElementById('mural-overlay');
-
-    if (nftEl) {
-        nftEl.setAttribute('url', MARKER_URL);
+    function absoluteUrl(path) {
+        return path ? new URL(path, document.baseURI).href : '';
     }
+
+    function markerUrl(path) {
+        if (!path) return '';
+        return looksLikeDomain ? absoluteUrl(path) : path;
+    }
+
+    var targetRoot = document.getElementById('targets-root');
+    var targetEntries = [];
+    var markerEls = [];
+    var overlayEls = [];
+    var activeTarget = null;
+    var expectedTargets = 0;
 
     /* ------------------------------------------------------------------
      * Shaders
@@ -434,19 +441,38 @@
         schema: {
             // 1 = exactly the marker size. HUD calibration multiplies this.
             fit: { type: 'number', default: 1 },
-            intensity: { type: 'number', default: 1 }
+            intensity: { type: 'number', default: 1 },
+            // Per-target assets, written by the backoffice and passed in from
+            // targets.json. They are relative to index.html.
+            photo: { type: 'string', default: '' },
+            edges: { type: 'string', default: '' },
+            gif: { type: 'string', default: '' },
+            // Physical marker size in millimetres, from the target's .iset
+            // metadata (pixels / 72 DPI). Keeping it per-component avoids the
+            // global arjs-nft-init-data event mixing up multiple targets.
+            markerWidth: { type: 'number', default: 0 },
+            markerHeight: { type: 'number', default: 0 },
+            label: { type: 'string', default: '' }
         },
 
         init: function () {
             var self = this;
 
             // The photo is 2048x1536 at 72 DPI. AR.js uses millimetres, so the
-            // marker is ~722 x 542 mm in its coordinate space. The precise
-            // values arrive through the arjs-nft-init-data event below.
-            this.markerWidth = (2048 / 72) * 25.4;
-            this.markerHeight = (1536 / 72) * 25.4;
+            // marker is ~722 x 542 mm in its coordinate space. targets.json
+            // supplies the exact values for every couple.
+            this.markerWidth = this.data.markerWidth > 0
+                ? this.data.markerWidth
+                : (2048 / 72) * 25.4;
+            this.markerHeight = this.data.markerHeight > 0
+                ? this.data.markerHeight
+                : (1536 / 72) * 25.4;
             this.ready = false;
             this.wasVisible = false;
+
+            var photoUrl = absoluteUrl(this.data.photo);
+            var edgesUrl = absoluteUrl(this.data.edges);
+            this.gifUrl = absoluteUrl(this.data.gif);
 
             var placeholder = new THREE.DataTexture(
                 new Uint8Array([10, 16, 22, 255]), 1, 1, THREE.RGBAFormat
@@ -500,46 +526,44 @@
                 }
             }
 
-            loader.load(PHOTO_URL, function (texture) {
-                texture.colorSpace = THREE.NoColorSpace;
-                texture.anisotropy = 4;
-                texture.minFilter = THREE.LinearMipmapLinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-                texture.generateMipmaps = true;
-                self.uniforms.uMap.value = texture;
-                self.photoTexture = texture;
+            if (photoUrl) {
+                loader.load(photoUrl, function (texture) {
+                    texture.colorSpace = THREE.NoColorSpace;
+                    texture.anisotropy = 4;
+                    texture.minFilter = THREE.LinearMipmapLinearFilter;
+                    texture.magFilter = THREE.LinearFilter;
+                    texture.generateMipmaps = true;
+                    self.uniforms.uMap.value = texture;
+                    self.photoTexture = texture;
+                    textureDone();
+                }, undefined, function () {
+                    // Keep the placeholder rather than throwing; tracking still works.
+                    self.el.emit('hologram-texture-error', { src: photoUrl });
+                    textureDone();
+                });
+            } else {
                 textureDone();
-            }, undefined, function () {
-                // Keep the placeholder rather than throwing; tracking still works.
-                self.el.emit('hologram-texture-error', { src: PHOTO_URL });
-                textureDone();
-            });
+            }
 
-            loader.load(EDGES_URL, function (texture) {
-                texture.colorSpace = THREE.NoColorSpace;
-                texture.minFilter = THREE.LinearMipmapLinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-                texture.generateMipmaps = true;
-                self.uniforms.uEdges.value = texture;
-                self.edgeTexture = texture;
+            if (edgesUrl) {
+                loader.load(edgesUrl, function (texture) {
+                    texture.colorSpace = THREE.NoColorSpace;
+                    texture.minFilter = THREE.LinearMipmapLinearFilter;
+                    texture.magFilter = THREE.LinearFilter;
+                    texture.generateMipmaps = true;
+                    self.uniforms.uEdges.value = texture;
+                    self.edgeTexture = texture;
+                    textureDone();
+                }, undefined, function () {
+                    self.el.emit('hologram-texture-error', { src: edgesUrl });
+                    textureDone();
+                });
+            } else {
                 textureDone();
-            }, undefined, function () {
-                self.el.emit('hologram-texture-error', { src: EDGES_URL });
-                textureDone();
-            });
-
-            this.onMarkerInfo = function (event) {
-                var info = event.detail || {};
-                if (info.dpi > 0 && info.width > 0 && info.height > 0) {
-                    self.markerWidth = (info.width / info.dpi) * 25.4;
-                    self.markerHeight = (info.height / info.dpi) * 25.4;
-                    self.applyScale();
-                }
-            };
-            window.addEventListener('arjs-nft-init-data', this.onMarkerInfo);
+            }
 
             this.applyScale();
-            this.initGif();
+            this.initGif(this.gifUrl);
         },
 
         /*
@@ -549,7 +573,7 @@
          * DataTexture. The shader above stays in place as a fallback until the
          * GIF is ready (or if it cannot be decoded).
          */
-        initGif: function () {
+        initGif: function (url) {
             var self = this;
 
             this.gifStarted = false;
@@ -557,7 +581,11 @@
             this.gifFrameIndex = -1;
             this.gifHiddenAt = 0;
 
-            fetch(GIF_URL)
+            if (!url) {
+                return;
+            }
+
+            fetch(url)
                 .then(function (response) {
                     if (!response.ok) {
                         throw new Error('HTTP ' + response.status);
@@ -575,7 +603,7 @@
                 .catch(function (error) {
                     // Leave the hologram shader running.
                     self.el.emit('hologram-gif-error', {
-                        src: GIF_URL,
+                        src: url,
                         message: error && error.message
                     });
                 });
@@ -719,7 +747,6 @@
         },
 
         remove: function () {
-            window.removeEventListener('arjs-nft-init-data', this.onMarkerInfo);
             this.gifFrames = null;
             if (this.mesh) {
                 this.mesh.geometry.dispose();
@@ -782,14 +809,20 @@
             // frame-to-frame z movement about 16x (6.9 mm -> 0.5 mm std)
             // while a fast pan still trails by only ~2% of the marker.
             restTau: { type: 'number', default: 0.45 },
-            moveTau: { type: 'number', default: 0.02 }
+            moveTau: { type: 'number', default: 0.02 },
+            // Physical marker width in millimetres for this specific target.
+            // When supplied, the global arjs-nft-init-data event is ignored so
+            // one marker's metadata cannot affect another.
+            markerWidth: { type: 'number', default: 0 }
         },
 
         init: function () {
             var self = this;
 
             // 2048 px at 72 DPI, the same default as hologram-mural.
-            this.markerWidth = (2048 / 72) * 25.4;
+            this.markerWidth = this.data.markerWidth > 0
+                ? this.data.markerWidth
+                : (2048 / 72) * 25.4;
             this.position = new THREE.Vector3();
             this.quaternion = new THREE.Quaternion();
             this.rawPosition = new THREE.Vector3();
@@ -800,6 +833,7 @@
             this.lastAngleError = 0;
 
             this.onMarkerInfo = function (event) {
+                if (self.data.markerWidth > 0) return;
                 var info = event.detail || {};
                 if (info.dpi > 0 && info.width > 0) {
                     self.markerWidth = (info.width / info.dpi) * 25.4;
@@ -1110,6 +1144,10 @@
     var statusPill = document.getElementById('status-pill');
     var statusText = document.getElementById('status-text');
     var hint = document.getElementById('hint');
+    var hintThumb = document.getElementById('hint-thumb');
+    var hintTitle = document.getElementById('hint-title');
+    var hintText = document.getElementById('hint-text');
+    var targetTag = document.querySelector('.target-tag');
     var loader = document.getElementById('loader');
     var loaderText = document.getElementById('loader-text');
     var loaderNote = document.getElementById('loader-note');
@@ -1213,7 +1251,7 @@
         if (cameraReady && markersReady) {
             hideLoader();
             if (!tracking) {
-                setStatus('Scanning for mural', 'scanning');
+                setStatus('Scanning for target', 'scanning');
             }
         } else if (markersReady) {
             if (loaderText) loaderText.textContent = 'Waiting for the camera…';
@@ -1298,7 +1336,24 @@
         }
     }
 
-    function trackFound() {
+    function updateTargetHud(target) {
+        if (!target) return;
+        activeTarget = target;
+
+        if (targetTag) {
+            targetTag.textContent = 'TARGET · ' + target.id;
+        }
+        if (hintThumb) {
+            hintThumb.src = absoluteUrl(target.image);
+            hintThumb.alt = target.title + ' image target';
+        }
+        if (hintTitle) {
+            hintTitle.textContent = 'Point at ' + (target.title || 'the print');
+        }
+    }
+
+    function trackFound(target) {
+        if (target) updateTargetHud(target);
         lostAt = 0;
         if (tracking) return;
         tracking = true;
@@ -1315,24 +1370,139 @@
         document.body.classList.remove('is-tracking');
         if (failed) return;
         if (hint) hint.classList.remove('is-hidden');
-        setStatus('Scanning for mural', 'scanning');
+        setStatus('Scanning for target', 'scanning');
     }
 
-    // AR.js emits these, but polling object3D.visible is a reliable fallback
-    // across AR.js versions and smoothing configurations.
-    if (nftEl) {
-        nftEl.addEventListener('markerFound', trackFound);
-        nftEl.addEventListener('markerLost', function () {
-            if (tracking) lostAt = performance.now();
-        });
+    function createTargetEntities(list) {
+        targetEntries = list;
+        expectedTargets = list.length;
+
+        var root = targetRoot || arSceneEl;
+        if (!root) return;
+
+        for (var index = 0; index < list.length; index++) {
+            var target = list[index];
+            var first = index === 0;
+
+            var nft = document.createElement('a-nft');
+            nft.setAttribute('id', first ? 'mural-target' : 'target-' + target.id);
+            nft.setAttribute('type', 'nft');
+            nft.setAttribute('url', markerUrl(target.marker));
+            nft.setAttribute('nft-pose-smoother', {
+                enabled: true,
+                markerWidth: target.widthMm || 0
+            });
+            nft.setAttribute('min-confidence', '0.5');
+            nft.setAttribute('hit-testing-enabled', 'false');
+
+            var overlay = document.createElement('a-entity');
+            overlay.setAttribute('id', first ? 'mural-overlay' : 'overlay-' + target.id);
+            overlay.setAttribute('hologram-mural', {
+                fit: currentFit / 100,
+                intensity: savedFx ? 1 : 0,
+                photo: target.image,
+                edges: target.edges || '',
+                gif: target.animation || '',
+                markerWidth: target.widthMm || 0,
+                markerHeight: target.heightMm || 0,
+                label: target.title || target.id
+            });
+            overlay.setAttribute('ar-sparkles', 'enabled', savedFx);
+            overlay.setAttribute('ar-rings', 'enabled', savedFx);
+            overlay.setAttribute('ar-brackets', 'enabled', savedFx);
+
+            nft.appendChild(overlay);
+            root.appendChild(nft);
+
+            (function (entry, targetData) {
+                entry.addEventListener('markerFound', function () {
+                    trackFound(targetData);
+                });
+                entry.addEventListener('markerLost', function () {
+                    if (activeTarget === targetData) lostAt = performance.now();
+                });
+            })(nft, target);
+
+            markerEls.push({ el: nft, target: target, overlay: overlay });
+            overlayEls.push(overlay);
+        }
+
+        // The camera may already be running; the loading kicker waits for
+        // expectedTargets before replaying arjs-video-loaded, so every marker
+        // gets its own NFT worker.
+        var loaderBg = document.querySelector('.loader-bg');
+        if (loaderBg && list[0] && list[0].image) {
+            loaderBg.style.backgroundImage = 'url("' + absoluteUrl(list[0].image) + '")';
+        }
+        updateTargetHud(list[0]);
+        maybeStart();
     }
 
+    function showEmptyState() {
+        hideLoader();
+        setStatus('No image targets yet', 'scanning');
+        if (hint) hint.classList.remove('is-hidden');
+        if (hintThumb) hintThumb.style.display = 'none';
+        if (hintTitle) hintTitle.textContent = 'No scannable prints yet';
+        if (hintText) {
+            hintText.textContent = 'Add an image and animation in the backoffice, then reload this page.';
+        }
+        if (targetTag) targetTag.textContent = 'TARGET · none';
+    }
+
+    function showSetupError(message, hintText) {
+        var errorTitle = document.getElementById('error-title');
+        var kicker = document.querySelector('.error-kicker');
+        if (errorTitle) errorTitle.textContent = 'The target list could not load';
+        if (kicker) kicker.textContent = 'Setup needed';
+        showError(message, hintText);
+        setStatus('Setup needed', 'error');
+    }
+
+    function loadTargets() {
+        fetch(MANIFEST_URL, { cache: 'no-store' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(function (manifest) {
+                var list = manifest && Array.isArray(manifest.targets)
+                    ? manifest.targets.filter(function (target) {
+                        return target && target.id && target.image && target.marker;
+                    })
+                    : [];
+
+                if (!list.length) {
+                    showEmptyState();
+                    return;
+                }
+                createTargetEntities(list);
+            })
+            .catch(function (error) {
+                showSetupError(
+                    'The target list could not be loaded.',
+                    'Check that assets/targets.json is reachable and valid. ' +
+                    (error && error.message ? error.message : '')
+                );
+            });
+    }
+
+    // AR.js emits markerFound/Lost, but polling object3D.visible is a reliable
+    // fallback across AR.js versions and smoothing configurations.
     window.setInterval(function () {
-        if (!nftEl) return;
-        var visible = !!(nftEl.object3D && nftEl.object3D.visible);
+        if (!markerEls.length) return;
 
-        if (visible) {
-            trackFound();
+        var found = null;
+        for (var i = 0; i < markerEls.length; i++) {
+            var entry = markerEls[i];
+            if (entry.el.object3D && entry.el.object3D.visible) {
+                found = entry;
+                break;
+            }
+        }
+
+        if (found) {
+            trackFound(found.target);
         } else if (tracking && lostAt && performance.now() - lostAt > 900) {
             // A short grace period avoids flicker while the tracker blinks.
             trackLost();
@@ -1394,6 +1564,14 @@
 
     window.setInterval(function () {
         if (markersReady || failed) return;
+
+        // AR.js only starts an NFT worker for markers that are already in the
+        // DOM when arjs-video-loaded fires. The manifest is fetched after the
+        // scene boots, so wait until every expected <a-nft> exists before
+        // replaying the event (one dispatch starts one worker per marker).
+        if (!expectedTargets || document.querySelectorAll('a-nft').length < expectedTargets) {
+            return;
+        }
 
         var video = getVideoElement();
         var sceneEl = document.getElementById('ar-scene');
@@ -1490,7 +1668,7 @@
         if (!markersReady && cameraReady) {
             if (loaderText) loaderText.textContent = 'Still loading image descriptors…';
             if (loaderNote) {
-                loaderNote.textContent = 'Check that assets/nft/photo-iut.fset, .fset3 and .iset are reachable.';
+                loaderNote.textContent = 'Check that assets/targets.json and the target marker files are reachable.';
             }
             return;
         }
@@ -1516,19 +1694,20 @@
         var fit = clamp(value, 85, 115);
         currentFit = fit;
         renderFit(fit);
-        if (overlayEl) {
-            overlayEl.setAttribute('hologram-mural', 'fit', fit / 100);
+        for (var i = 0; i < overlayEls.length; i++) {
+            overlayEls[i].setAttribute('hologram-mural', 'fit', fit / 100);
         }
         writePref(PREF_FIT, fit);
     }
 
     function applyFx(enabled) {
         if (fxToggle) fxToggle.checked = enabled;
-        if (overlayEl) {
-            overlayEl.setAttribute('hologram-mural', 'intensity', enabled ? 1 : 0);
-            overlayEl.setAttribute('ar-sparkles', 'enabled', enabled);
-            overlayEl.setAttribute('ar-rings', 'enabled', enabled);
-            overlayEl.setAttribute('ar-brackets', 'enabled', enabled);
+        for (var i = 0; i < overlayEls.length; i++) {
+            var overlay = overlayEls[i];
+            overlay.setAttribute('hologram-mural', 'intensity', enabled ? 1 : 0);
+            overlay.setAttribute('ar-sparkles', 'enabled', enabled);
+            overlay.setAttribute('ar-rings', 'enabled', enabled);
+            overlay.setAttribute('ar-brackets', 'enabled', enabled);
         }
         writePref(PREF_FX, enabled ? 1 : 0);
     }
@@ -1583,6 +1762,19 @@
         },
         get fit() {
             return currentFit;
+        },
+        get targets() {
+            return targetEntries.map(function (target) {
+                return { id: target.id, title: target.title };
+            });
+        },
+        get active() {
+            return activeTarget ? activeTarget.id : null;
+        },
+        get markerCount() {
+            return markerEls.length;
         }
     };
+
+    loadTargets();
 })();

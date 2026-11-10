@@ -5,8 +5,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#04070b" />
-    <meta name="description" content="Point your camera at the STUDIÀ LIBERTÀ mural to bring an animated, holographic layer to life in place." />
-    <title>STUDIÀ LIBERTÀ · AR Mural</title>
+    <meta name="description" content="Point your camera at a printed image to bring an animated, holographic layer to life in place." />
+    <title>STUDIÀ LIBERTÀ · AR</title>
     <link rel="stylesheet" href="assets/style.css" />
 
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
@@ -26,23 +26,10 @@
         device-orientation-permission-ui="enabled: false"
         xr-mode-ui="enabled: false">
 
-        <!-- The image target. The url is normalised to an absolute path by app.js. -->
-        <a-nft
-            id="mural-target"
-            type="nft"
-            url="assets/nft/photo-iut"
-            nft-pose-smoother="enabled: true"
-            min-confidence="0.5"
-            hit-testing-enabled="false">
-
-            <!-- Scaled to the printed marker size once AR.js reports the NFT metadata. -->
-            <a-entity
-                id="mural-overlay"
-                hologram-mural="fit: 1; intensity: 1"
-                ar-sparkles
-                ar-rings
-                ar-brackets></a-entity>
-        </a-nft>
+        <!-- Image targets are created at runtime from assets/targets.json so
+             the backoffice can add or remove scannable couples without editing
+             this file. Each <a-nft> gets its own overlay + pose filter. -->
+        <a-entity id="targets-root"></a-entity>
 
         <a-entity camera></a-entity>
     </a-scene>
@@ -71,17 +58,17 @@
 
         <aside id="hint" class="hint-card">
             <div class="hint-thumb">
-                <img src="assets/photo-iut.jpg" alt="The STUDIÀ LIBERTÀ mural image target" />
+                <img id="hint-thumb" src="assets/targets/photo-iut/image.jpg" alt="Current image target" />
                 <span class="hint-scan" aria-hidden="true"></span>
             </div>
             <div class="hint-copy">
-                <p class="hint-title">Point at the mural</p>
-                <p class="hint-text">Fill the frame with the painted wall. Keep the whole image in view, then hold steady.</p>
+                <p id="hint-title" class="hint-title">Point at the print</p>
+                <p id="hint-text" class="hint-text">Fill the frame with the print. Keep the whole image in view, then hold steady.</p>
             </div>
         </aside>
 
         <div class="hud-bottom">
-            <p class="target-tag" aria-hidden="true">TARGET · photo-iut</p>
+            <p id="target-tag" class="target-tag" aria-hidden="true">TARGET · photo-iut</p>
             <button id="tune-btn" class="pill-btn" type="button" aria-expanded="false" aria-controls="tune-panel">Tune overlay</button>
         </div>
 

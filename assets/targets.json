@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-10T15:51:50.272Z",
+  "targets": [
+    {
+      "id": "photo-iut",
+      "title": "STUDIÀ LIBERTÀ",
+      "image": "assets/targets/photo-iut/image.jpg",
+      "animation": "assets/targets/photo-iut/animation.gif",
+      "edges": "assets/targets/photo-iut/edges.png",
+      "marker": "assets/targets/photo-iut/marker",
+      "width": 2048,
+      "height": 1536,
+      "dpi": 72,
+      "widthMm": 722.488,
+      "heightMm": 541.866,
+      "autoAnimation": false,
+      "animationWidth": 438,
+      "animationHeight": 389,
+      "animationFrames": 9,
+      "createdAt": "2026-11-10T00:00:00.000Z"
+    },
+    {
+      "id": "image",
+      "title": "image",
+      "image": "assets/targets/image/image.jpg",
+      "animation": "assets/targets/image/animation.gif",
+      "edges": "assets/targets/image/edges.png",
+      "marker": "assets/targets/image/marker",
+      "width": 768,
+      "height": 1024,
+      "dpi": 72,
+      "widthMm": 270.933,
+      "heightMm": 361.244,
+      "autoAnimation": false,
+      "animationWidth": 414,
+      "animationHeight": 411,
+      "animationFrames": null,
+      "createdAt": "2026-11-10T15:51:50.271Z",
+      "notice": "The animation is 414×411 but the image is 768×1024; it will be stretched to fill the print."
+    }
+  ]
+}
