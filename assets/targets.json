@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-10T16:41:06.767Z",
+  "updatedAt": "2026-11-10T16:46:10.249Z",
   "targets": [
     {
       "id": "image",
@@ -98,12 +98,12 @@
       "notice": "The animation is 250×250 but the image is 1616×1540; it will be stretched to fill the print."
     },
     {
-      "id": "img-4349-jpg",
-      "title": "IMG 4349.jpg",
-      "image": "assets/targets/img-4349-jpg/image.jpg",
-      "animation": "assets/targets/img-4349-jpg/animation.gif",
-      "edges": "assets/targets/img-4349-jpg/edges.png",
-      "marker": "assets/targets/img-4349-jpg/marker",
+      "id": "julia-panneau-extincteur-1",
+      "title": "Julia panneau extincteur(1)",
+      "image": "assets/targets/julia-panneau-extincteur-1/image.jpg",
+      "animation": "assets/targets/julia-panneau-extincteur-1/animation.gif",
+      "edges": "assets/targets/julia-panneau-extincteur-1/edges.png",
+      "marker": "assets/targets/julia-panneau-extincteur-1/marker",
       "width": 518,
       "height": 484,
       "dpi": 72,
@@ -113,7 +113,7 @@
       "animationWidth": 439,
       "animationHeight": 389,
       "animationFrames": null,
-      "createdAt": "2026-11-10T16:41:06.767Z",
+      "createdAt": "2026-11-10T16:46:10.248Z",
       "notice": "The animation is 439×389 but the image is 518×484; it will be stretched to fill the print."
     }
   ]
