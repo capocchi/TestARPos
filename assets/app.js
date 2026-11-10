@@ -733,6 +733,159 @@
     });
 
     /* ------------------------------------------------------------------
+     * Tracking stabiliser
+     * ------------------------------------------------------------------
+     * The NFT worker reports a new pose at camera frame rate, and that pose
+     * carries a little noise every frame. Rendering it straight puts that
+     * noise on screen, which is the classic AR.js "swimming"/jitter look.
+     *
+     * This filter runs from the renderer hook at the bottom of this file:
+     * after A-Frame has ticked (so this frame's raw pose has been written)
+     * and right before the draw, so the pose it produces is the one shown:
+     *
+     *   - tiny pose errors are deadbanded away (the overlay freezes),
+     *   - at rest the filter is slow (very smooth),
+     *   - as the marker actually moves the filter opens up, so fast pans do
+     *     not feel laggy,
+     *   - a fresh lock snaps straight to the raw pose instead of gliding in.
+     *
+     * It is frame-rate independent (time constant in seconds) and also
+     * replaces AR.js's crude matrix-averaging `smooth` option.
+     */
+    function smoothstep(edge0, edge1, value) {
+        var t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
+    // Filled in by nft-pose-smoother instances; the renderer hook near the
+    // bottom of this file runs them right before each draw.
+    var poseFilters = [];
+
+    AFRAME.registerComponent('nft-pose-smoother', {
+        schema: {
+            enabled: { type: 'boolean', default: true },
+            // Pose error below which the overlay is considered at rest.
+            // Translation is a fraction of the marker width; rotation is in
+            // degrees.
+            deadband: { type: 'number', default: 0.001 },
+            rotationDeadband: { type: 'number', default: 0.1 },
+            // Pose error at which the filter starts opening / is fully open.
+            // The rest noise on a static camera peaks around 2% of the marker
+            // width, so these sit just above it: noise stays smoothed, real
+            // movement opens the filter.
+            moveStart: { type: 'number', default: 0.004 },
+            moveFull: { type: 'number', default: 0.032 },
+            rotationMoveStart: { type: 'number', default: 0.35 },
+            rotationMoveFull: { type: 'number', default: 4 },
+            // Low-pass time constants, in seconds: held still vs moving.
+            // Tuned on a static fake camera feed: 0.45 s at rest cuts
+            // frame-to-frame z movement about 16x (6.9 mm -> 0.5 mm std)
+            // while a fast pan still trails by only ~2% of the marker.
+            restTau: { type: 'number', default: 0.45 },
+            moveTau: { type: 'number', default: 0.02 }
+        },
+
+        init: function () {
+            var self = this;
+
+            // 2048 px at 72 DPI, the same default as hologram-mural.
+            this.markerWidth = (2048 / 72) * 25.4;
+            this.position = new THREE.Vector3();
+            this.quaternion = new THREE.Quaternion();
+            this.rawPosition = new THREE.Vector3();
+            this.rawQuaternion = new THREE.Quaternion();
+            this.initialised = false;
+            this.lastVisible = false;
+            this.lastPositionError = 0;
+            this.lastAngleError = 0;
+
+            this.onMarkerInfo = function (event) {
+                var info = event.detail || {};
+                if (info.dpi > 0 && info.width > 0) {
+                    self.markerWidth = (info.width / info.dpi) * 25.4;
+                }
+            };
+            window.addEventListener('arjs-nft-init-data', this.onMarkerInfo);
+
+            poseFilters.push(this);
+        },
+
+        filterPose: function (time, delta) {
+            var object3D = this.el.object3D;
+            var rawPosition = object3D.position;
+            var rawQuaternion = object3D.quaternion;
+            var visible = object3D.visible;
+
+            if (!this.data.enabled) {
+                this.initialised = false;
+                return;
+            }
+
+            if (!visible) {
+                this.lastVisible = false;
+                return;
+            }
+
+            // Locked, or re-acquired after a loss: start from the raw pose so
+            // the overlay never slides in from where it was last seen.
+            if (!this.initialised || !this.lastVisible) {
+                this.position.copy(rawPosition);
+                this.quaternion.copy(rawQuaternion);
+                this.rawPosition.copy(rawPosition);
+                this.rawQuaternion.copy(rawQuaternion);
+                this.initialised = true;
+                this.lastVisible = true;
+                this.lastPositionError = 0;
+                this.lastAngleError = 0;
+                return;
+            }
+            this.lastVisible = true;
+            this.rawPosition.copy(rawPosition);
+            this.rawQuaternion.copy(rawQuaternion);
+
+            var positionError = this.position.distanceTo(rawPosition);
+            var dot = Math.min(1, Math.abs(this.quaternion.dot(rawQuaternion)));
+            var angleError = 2 * Math.acos(dot) * 180 / Math.PI;
+
+            this.lastPositionError = positionError;
+            this.lastAngleError = angleError;
+
+            var positionNorm = positionError / this.markerWidth;
+            var motion = Math.max(
+                smoothstep(this.data.moveStart, this.data.moveFull, positionNorm),
+                smoothstep(this.data.rotationMoveStart, this.data.rotationMoveFull,
+                    angleError)
+            );
+
+            var atRest = positionError <= this.data.deadband * this.markerWidth &&
+                angleError <= this.data.rotationDeadband;
+
+            if (!atRest) {
+                var tau = this.data.restTau +
+                    (this.data.moveTau - this.data.restTau) * motion;
+                var dt = Math.max(1, Math.min(delta || 16.7, 100)) / 1000;
+                var alpha = 1 - Math.exp(-dt / tau);
+
+                this.position.lerp(rawPosition, alpha);
+                this.quaternion.slerp(rawQuaternion, alpha);
+            }
+
+            // arjs-anchor rewrites the raw pose next tick; this is what this
+            // frame renders with.
+            object3D.position.copy(this.position);
+            object3D.quaternion.copy(this.quaternion);
+        },
+
+        remove: function () {
+            window.removeEventListener('arjs-nft-init-data', this.onMarkerInfo);
+            var index = poseFilters.indexOf(this);
+            if (index !== -1) {
+                poseFilters.splice(index, 1);
+            }
+        }
+    });
+
+    /* ------------------------------------------------------------------
      * Floating sparkles
      * ------------------------------------------------------------------ */
     AFRAME.registerComponent('ar-sparkles', {
@@ -1124,6 +1277,12 @@
 
         var originalRender = renderer.render;
         renderer.render = function (scene, camera) {
+            // Runs after A-Frame's tick (so the raw AR.js pose is in place)
+            // and before the draw, which is exactly where the stabiliser
+            // needs to be.
+            for (var i = 0; i < poseFilters.length; i++) {
+                poseFilters[i].filterPose(arSceneEl.time, arSceneEl.delta);
+            }
             if (camera && camera === arSceneEl.camera) {
                 coverProjection();
             }

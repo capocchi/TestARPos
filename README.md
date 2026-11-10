@@ -96,7 +96,49 @@ The tool writes `<name>.fset`, `<name>.fset3`, and `<name>.iset` and prints a co
   - starts from frame 0 on detection; a short tracking blink (under 1.5 s) resumes where it left off, while a longer loss restarts it.
 - Until the GIF has downloaded and decoded, or if it cannot be decoded, the component keeps its original `ShaderMaterial` (photo + neon edge map, scan bands, CRT texture) so tracking still shows something.
 - `ar-sparkles`, `ar-rings`, and `ar-brackets` add procedural points, rotating arcs, and pulsing corner marks — all scaled to the marker.
-- A small renderer hook corrects AR.js's projection for non-4:3 viewports (see below).
+- `nft-pose-smoother` (on the `<a-nft>` entity) filters the raw pose before each draw to remove AR.js tracking jitter — see below.
+- A small renderer hook corrects AR.js's projection for non-4:3 viewports and runs the pose filter (see below).
+
+### Tracking jitter
+
+AR.js re-estimates the marker pose on every camera frame, and that raw pose carries
+high-frequency noise. On a perfectly static camera feed the reported z translation
+alone moves by up to ~20 mm between consecutive frames (a ~30 mm span while nothing
+moves), which is what makes the overlay appear to swim or shake over the print.
+
+`nft-pose-smoother` is attached to `<a-nft>` and runs from the existing renderer
+hook: after A-Frame has ticked (so the raw AR.js pose for this frame is in place)
+and immediately before the draw. It low-passes the pose with a time constant that
+adapts to the situation:
+
+- **At rest** it is slow (`restTau`, 0.45 s) and a small deadband freezes motion
+  below 0.1% of the marker width, so the overlay holds still instead of
+  breathing with the tracker.
+- **While the marker actually moves** the cutoff opens towards `moveTau` (0.02 s).
+  The motion factor is derived from the pose error — translation as a fraction of
+  the marker width (`moveStart`/`moveFull`), rotation in degrees — so a fast pan
+  is followed with only a small, constant trail instead of feeling laggy.
+- **On first lock, or after losing the marker**, the filter snaps straight to the
+  raw pose, so a re-acquired layer never glides in from wherever it was last seen.
+- The filter is frame-rate independent (time constants in seconds) and runs before
+  the draw, so the frame that is displayed is already the filtered pose.
+
+Measured on the static fake-camera fixture: frame-to-frame z movement drops from
+~6.9 mm standard deviation (p99 ~19 mm) to ~0.46 mm (p99 ~1.6 mm), about a 16×
+reduction, while a 480 mm/s pan trails by ~2% of the marker width.
+
+AR.js's built-in `smooth`, `smooth-count`, `smooth-tolerance`, and
+`smooth-threshold` options are **not** used. They average the raw matrix and
+only switch to the averaged pose once enough elements deviate past a threshold,
+which makes the motion either ignore small corrections or jump between the
+averaged and raw poses. The adaptive filter above replaces them.
+
+The component's thresholds and time constants are exposed as attributes on
+`<a-nft>` if you need to tune for a particular camera:
+
+```html
+<a-nft ... nft-pose-smoother="restTau: 0.45; moveTau: 0.02"></a-nft>
+```
 
 ### Replacing the animation
 
