@@ -1,58 +1,137 @@
 <!doctype html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#04070b" />
+    <meta name="description" content="Point your camera at the STUDIÀ LIBERTÀ mural to bring an animated, holographic layer to life in place." />
+    <title>STUDIÀ LIBERTÀ · AR Mural</title>
     <link rel="stylesheet" href="assets/style.css" />
-    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
-    <script src="assets/arjs-compat.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ar-js-org/ar.js@3.4.8/aframe/build/aframe-ar-nft.js"></script>
 </head>
 
-<body style="margin: 0; overflow: hidden;">
-    <div id="hud-stack">
-        <div id="gps-hud" class="hud-panel">
-            <div class="gps-hud-title">CURRENT GPS POSITION</div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Lat</span><span class="gps-hud-value" id="gps-lat">--</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Lon</span><span class="gps-hud-value" id="gps-lon">--</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Acc</span><span class="gps-hud-value" id="gps-acc">--</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Alt</span><span class="gps-hud-value" id="gps-alt">--</span></div>
-            <div class="gps-hud-status" id="gps-status">waiting for GPS…</div>
+<body>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         AR scene
+         ═══════════════════════════════════════════════════════════════════ -->
+    <a-scene
+        id="ar-scene"
+        embedded
+        renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true; colorManagement: true;"
+        arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+        loading-screen="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+        xr-mode-ui="enabled: false">
+
+        <!-- The image target. The url is normalised to an absolute path by app.js. -->
+        <a-nft
+            id="mural-target"
+            type="nft"
+            url="assets/nft/photo-iut"
+            smooth="true"
+            smooth-count="8"
+            smooth-tolerance="0.005"
+            smooth-threshold="4"
+            min-confidence="0.5"
+            hit-testing-enabled="false">
+
+            <!-- Scaled to the printed marker size once AR.js reports the NFT metadata. -->
+            <a-entity
+                id="mural-overlay"
+                hologram-mural="fit: 1; intensity: 1"
+                ar-sparkles
+                ar-rings
+                ar-brackets></a-entity>
+        </a-nft>
+
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         HUD
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="ui">
+        <div class="viewport-frame" aria-hidden="true">
+            <i></i><i></i><i></i><i></i>
         </div>
 
-        <div id="marker-hud" class="hud-panel">
-            <div class="gps-hud-title">AR MARKER CHECK</div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Target</span><span class="gps-hud-value" id="marker-coords">42.297470, 9.154552</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Spec</span><span class="gps-hud-value" id="marker-spec">±6 m · 496 m</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">JPEG</span><span class="gps-hud-value" id="marker-asset">loading…</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">To point</span><span class="gps-hud-value" id="marker-distance">--</span></div>
-            <div class="gps-hud-status" id="marker-status">waiting for scene…</div>
+        <header class="hud-top">
+            <div class="brand">
+                <span class="brand-dot" aria-hidden="true"></span>
+                <div>
+                    <p class="brand-title">STUDIÀ LIBERTÀ</p>
+                    <p class="brand-sub">Animated mural · NFT image target</p>
+                </div>
+            </div>
+            <p id="status-pill" class="status is-loading" role="status" aria-live="polite">
+                <span class="status-dot" aria-hidden="true"></span>
+                <span id="status-text">Starting AR…</span>
+            </p>
+        </header>
+
+        <aside id="hint" class="hint-card">
+            <div class="hint-thumb">
+                <img src="assets/photo-iut.jpg" alt="The STUDIÀ LIBERTÀ mural image target" />
+                <span class="hint-scan" aria-hidden="true"></span>
+            </div>
+            <div class="hint-copy">
+                <p class="hint-title">Point at the mural</p>
+                <p class="hint-text">Fill the frame with the painted wall. Keep the whole image in view, then hold steady.</p>
+            </div>
+        </aside>
+
+        <div class="hud-bottom">
+            <p class="target-tag" aria-hidden="true">TARGET · photo-iut</p>
+            <button id="tune-btn" class="pill-btn" type="button" aria-expanded="false" aria-controls="tune-panel">Tune overlay</button>
+        </div>
+
+        <section id="tune-panel" class="panel" hidden aria-label="Overlay calibration">
+            <div class="panel-head">
+                <p class="panel-title">Overlay calibration</p>
+                <button id="tune-close" class="icon-btn" type="button" aria-label="Close calibration">×</button>
+            </div>
+            <label class="range-row" for="fit-range">
+                <span>Fit</span>
+                <output id="fit-value" for="fit-range">100%</output>
+            </label>
+            <input id="fit-range" type="range" min="85" max="115" step="0.5" value="100" />
+            <p class="panel-note">Nudge if the animated layer does not sit exactly on the print.</p>
+            <label class="switch-row" for="fx-toggle">
+                <span>
+                    Hologram effects
+                    <small>Turn off for a clean alignment check.</small>
+                </span>
+                <input id="fx-toggle" type="checkbox" checked />
+            </label>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Loader / error states
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="loader" class="loader">
+        <div class="loader-bg" aria-hidden="true"></div>
+        <div class="loader-inner">
+            <div class="loader-orbit" aria-hidden="true"><span></span></div>
+            <p class="loader-kicker">STUDIÀ LIBERTÀ · AR</p>
+            <h1 class="loader-title">Bringing the wall to life</h1>
+            <p id="loader-text" class="loader-text">Loading image descriptors…</p>
+            <p id="loader-note" class="loader-note">Allow camera access when your browser asks.</p>
         </div>
     </div>
 
-    <a-scene embedded loading-screen="enabled: false;" arjs="sourceType: webcam; debugUIEnabled: false;">
-        <a-assets>
-            <img id="marker-texture" src="assets/asset.jpeg">
-        </a-assets>
-
-        <!-- Single JPEG anchored at the measured position. It does not follow the
-             camera: it stays at this coordinate and only becomes visible when you
-             get within SHOW_RADIUS_M. Altitude is metadata only because AR.js
-             gps-entity-place supports latitude/longitude only. -->
-        <a-image id="ar-marker" src="#marker-texture" look-at="[gps-camera]" scale="5 5 1"
-            material="side: double" visible="false"
-            gps-entity-place="latitude: 42.297470; longitude: 9.154552;"
-            data-target-accuracy="6" data-target-altitude="496"></a-image>
-
-        <a-camera gps-camera="
-                    gpsMinDistance: 1;
-                    positionMinAccuracy: 100;
-                    gpsTimeInterval: 1000;
-                    maxDistance: 30;
-                " rotation-reader></a-camera>
-    </a-scene>
+    <div id="error" class="error-overlay" hidden>
+        <div class="error-card" role="alertdialog" aria-modal="true" aria-labelledby="error-title">
+            <p class="error-kicker">Camera blocked</p>
+            <h2 id="error-title">The camera could not start</h2>
+            <p id="error-message" class="error-message">Please allow camera access and reload the page.</p>
+            <p id="error-hint" class="error-hint"></p>
+            <button id="retry-btn" class="pill-btn pill-btn--solid" type="button" onclick="window.location.reload()">Reload page</button>
+        </div>
+    </div>
 
     <script src="assets/app.js"></script>
 </body>
