@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#04070b" />
+    <title>Backoffice · STUDIÀ LIBERTÀ AR</title>
+    <link rel="stylesheet" href="admin.css" />
+    <script src="admin.js" defer></script>
+</head>
+
+<body>
+    <div class="ambient" aria-hidden="true"></div>
+
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-dot" aria-hidden="true"></span>
+            <span>
+                <strong>STUDIÀ LIBERTÀ</strong>
+                <small>AR backoffice</small>
+            </span>
+        </a>
+        <div class="topbar-actions">
+            <a class="btn btn-ghost" href="/" target="_blank" rel="noopener">Open AR app ↗</a>
+            <button id="logout-btn" class="btn btn-ghost" type="button" hidden>Sign out</button>
+        </div>
+    </header>
+
+    <main class="shell">
+        <!-- ── Login ─────────────────────────────────────────────────── -->
+        <section id="login-view" class="login-card" aria-labelledby="login-title">
+            <p class="eyebrow">Restricted area</p>
+            <h1 id="login-title">Sign in to manage targets</h1>
+            <p class="lede">Add or remove the image / animation couples that the AR app can scan.
+                Marker files are generated on the server.</p>
+
+            <form id="login-form" autocomplete="on">
+                <label class="field">
+                    <span>Username</span>
+                    <input id="login-username" name="username" type="text" autocomplete="username" required
+                        autocapitalize="none" spellcheck="false" />
+                </label>
+                <label class="field">
+                    <span>Password</span>
+                    <input id="login-password" name="password" type="password" autocomplete="current-password"
+                        required />
+                </label>
+                <p id="login-error" class="form-error" role="alert" hidden></p>
+                <button id="login-submit" class="btn btn-primary" type="submit">Enter backoffice</button>
+            </form>
+
+            <p class="fineprint">Sessions last 8 hours. Credentials are configured on the server with
+                <code>AR_ADMIN_USER</code> / <code>AR_ADMIN_PASSWORD</code>.</p>
+        </section>
+
+        <!-- ── Dashboard ─────────────────────────────────────────────── -->
+        <section id="dashboard" hidden>
+            <div class="page-head">
+                <div>
+                    <p class="eyebrow">Target library</p>
+                    <h1>Image / animation couples</h1>
+                    <p class="lede">Every couple becomes an AR.js NFT image target. The first target also
+                        becomes the hint thumbnail in the app.</p>
+                </div>
+                <div class="count-chip" id="target-count">0 targets</div>
+            </div>
+
+            <div class="layout">
+                <!-- Add -->
+                <section class="panel" aria-labelledby="add-title">
+                    <div class="panel-head">
+                        <div>
+                            <p class="eyebrow">New target</p>
+                            <h2 id="add-title">Add a couple</h2>
+                        </div>
+                    </div>
+
+                    <form id="add-form">
+                        <label class="field">
+                            <span>Display name <em>optional</em></span>
+                            <input id="title-input" name="title" type="text" maxlength="80"
+                                placeholder="e.g. STUDIÀ LIBERTÀ" />
+                        </label>
+
+                        <div class="upload-grid">
+                            <label class="upload-card" for="image-input">
+                                <span class="upload-label">Print image <b>required</b></span>
+                                <span class="upload-hint">JPEG, PNG or WebP · max 30 MB</span>
+                                <span id="image-name" class="upload-name">Choose an image…</span>
+                                <img id="image-preview" class="upload-preview" alt="" hidden />
+                                <input id="image-input" name="image" type="file"
+                                    accept="image/jpeg,image/png,image/webp" required />
+                            </label>
+
+                            <label class="upload-card" for="animation-input">
+                                <span class="upload-label">Animation <em>optional</em></span>
+                                <span class="upload-hint">GIF · leave empty to auto-generate</span>
+                                <span id="animation-name" class="upload-name">Choose a GIF…</span>
+                                <img id="animation-preview" class="upload-preview" alt="" hidden />
+                                <input id="animation-input" name="animation" type="file" accept="image/gif" />
+                            </label>
+                        </div>
+
+                        <p class="note">
+                            <strong>No GIF?</strong> The server generates a subtle living-light loop from the
+                            print: the image stays exactly aligned and only a light sweep and sparkles move.
+                        </p>
+                        <p class="note">
+                            <strong>Marker generation</strong> runs in the background and usually takes
+                            1–4 minutes. The couple appears in the list when it is ready to scan.
+                        </p>
+
+                        <p id="add-error" class="form-error" role="alert" hidden></p>
+                        <button id="add-submit" class="btn btn-primary" type="submit">Add target</button>
+                    </form>
+                </section>
+
+                <!-- Jobs -->
+                <section class="panel" aria-labelledby="jobs-title">
+                    <div class="panel-head">
+                        <div>
+                            <p class="eyebrow">Server work</p>
+                            <h2 id="jobs-title">Generation queue</h2>
+                        </div>
+                        <span id="jobs-badge" class="count-chip is-idle">Idle</span>
+                    </div>
+                    <div id="jobs-list" class="jobs-list" aria-live="polite">
+                        <p class="empty">Nothing is generating right now.</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Targets -->
+            <section class="panel targets-panel" aria-labelledby="targets-title">
+                <div class="panel-head">
+                    <div>
+                        <p class="eyebrow">Live in the app</p>
+                        <h2 id="targets-title">Scannable couples</h2>
+                    </div>
+                    <button id="refresh-btn" class="btn btn-ghost" type="button">Refresh</button>
+                </div>
+                <div id="targets-list" class="targets-grid"></div>
+                <p id="empty-targets" class="empty" hidden>No targets yet. Add an image above to get started.</p>
+            </section>
+        </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+
+</html>

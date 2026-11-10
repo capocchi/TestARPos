@@ -1,0 +1,20 @@
+{
+  "name": "studia-liberta-ar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AR.js NFT mural experience with a backoffice for image/animation targets",
+  "scripts": {
+    "start": "node server.js",
+    "admin": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.17.0"
+  },
+  "dependencies": {
+    "@webarkit/nft-marker-creator-app": "^0.4.0",
+    "express": "^5.2.1",
+    "gifenc": "^1.0.3",
+    "multer": "^2.0.2",
+    "sharp": "0.35.2"
+  }
+}
