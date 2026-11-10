@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-10T16:30:26.977Z",
+  "updatedAt": "2026-11-10T16:41:06.767Z",
   "targets": [
     {
       "id": "image",
@@ -60,25 +60,6 @@
       "notice": "The animation is 438×385 but the image is 2048×1536; it will be stretched to fill the print."
     },
     {
-      "id": "img-4349-jpg",
-      "title": "IMG 4349.jpg",
-      "image": "assets/targets/img-4349-jpg/image.jpg",
-      "animation": "assets/targets/img-4349-jpg/animation.gif",
-      "edges": "assets/targets/img-4349-jpg/edges.png",
-      "marker": "assets/targets/img-4349-jpg/marker",
-      "width": 959,
-      "height": 1280,
-      "dpi": 72,
-      "widthMm": 338.314,
-      "heightMm": 451.556,
-      "autoAnimation": false,
-      "animationWidth": 439,
-      "animationHeight": 389,
-      "animationFrames": null,
-      "createdAt": "2026-11-10T16:17:37.121Z",
-      "notice": "The animation is 439×389 but the image is 959×1280; it will be stretched to fill the print."
-    },
-    {
       "id": "porte",
       "title": "porte",
       "image": "assets/targets/porte/image.jpg",
@@ -115,6 +96,25 @@
       "animationFrames": null,
       "createdAt": "2026-11-10T16:30:26.977Z",
       "notice": "The animation is 250×250 but the image is 1616×1540; it will be stretched to fill the print."
+    },
+    {
+      "id": "img-4349-jpg",
+      "title": "IMG 4349.jpg",
+      "image": "assets/targets/img-4349-jpg/image.jpg",
+      "animation": "assets/targets/img-4349-jpg/animation.gif",
+      "edges": "assets/targets/img-4349-jpg/edges.png",
+      "marker": "assets/targets/img-4349-jpg/marker",
+      "width": 518,
+      "height": 484,
+      "dpi": 72,
+      "widthMm": 182.739,
+      "heightMm": 170.744,
+      "autoAnimation": false,
+      "animationWidth": 439,
+      "animationHeight": 389,
+      "animationFrames": null,
+      "createdAt": "2026-11-10T16:41:06.767Z",
+      "notice": "The animation is 439×389 but the image is 518×484; it will be stretched to fill the print."
     }
   ]
 }
