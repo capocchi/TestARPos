@@ -21,6 +21,7 @@
      * ------------------------------------------------------------------ */
     var PHOTO_URL = new URL('assets/photo-iut.jpg', document.baseURI).href;
     var EDGES_URL = new URL('assets/photo-iut-edges.png', document.baseURI).href;
+    var GIF_URL = new URL('assets/Mural_STUDIA_LIBERTA_en_animation.gif', document.baseURI).href;
 
     /*
      * AR.js's NFT worker resolves a marker path against self.origin and only
@@ -157,6 +158,276 @@
     ].join('\n');
 
     /* ------------------------------------------------------------------
+     * Minimal GIF decoder
+     * ------------------------------------------------------------------
+     * The browser paints an animated GIF on screen, but canvas drawImage()
+     * only ever returns its first frame. Decoding the file ourselves gives
+     * us the JPEG-sized frame list plus exact frame delays, which is what
+     * lets the overlay pause, resume and restart in step with the marker.
+     *
+     * Supports what the mural animation needs and virtually every GIF in the
+     * wild: global/local palettes, transparency, interlacing and all four
+     * disposal modes. Frames are returned as top-down RGBA buffers.
+     */
+    function lzwDecode(minCodeSize, data, pixelCount) {
+        var clearCode = 1 << minCodeSize;
+        var endCode = clearCode + 1;
+        var codeSize = minCodeSize + 1;
+        var nextCode = endCode + 1;
+        var maxCode = 4096;
+        var table = [];
+        var out = new Uint8Array(pixelCount);
+        var outPos = 0;
+        var prev = null;
+        var bitBuf = 0;
+        var bitCount = 0;
+        var dataPos = 0;
+        var i;
+
+        for (i = 0; i < clearCode; i++) {
+            table[i] = [i];
+        }
+
+        while (outPos < pixelCount) {
+            while (bitCount < codeSize) {
+                if (dataPos >= data.length) {
+                    return out;
+                }
+                bitBuf |= data[dataPos++] << bitCount;
+                bitCount += 8;
+            }
+
+            var code = bitBuf & ((1 << codeSize) - 1);
+            bitBuf >>= codeSize;
+            bitCount -= codeSize;
+
+            if (code === clearCode) {
+                codeSize = minCodeSize + 1;
+                nextCode = endCode + 1;
+                table.length = nextCode;
+                prev = null;
+                continue;
+            }
+            if (code === endCode) {
+                break;
+            }
+
+            var entry;
+            if (code < nextCode && table[code]) {
+                entry = table[code];
+            } else if (code === nextCode && prev) {
+                entry = prev.concat(prev[0]);
+            } else {
+                break;
+            }
+
+            for (i = 0; i < entry.length && outPos < pixelCount; i++) {
+                out[outPos++] = entry[i];
+            }
+
+            if (prev && nextCode < maxCode) {
+                table[nextCode++] = prev.concat(entry[0]);
+                if (nextCode === (1 << codeSize) && codeSize < 12) {
+                    codeSize += 1;
+                }
+            }
+            prev = entry;
+        }
+
+        return out;
+    }
+
+    function gifDrawFrame(dest, destWidth, palette, indices, left, top,
+        width, height, transparentIndex, interlaced) {
+        var passes = interlaced
+            ? [[0, 8], [4, 8], [2, 4], [1, 2]]
+            : [[0, 1]];
+        var srcRow = 0;
+
+        for (var pass = 0; pass < passes.length; pass++) {
+            var start = passes[pass][0];
+            var step = passes[pass][1];
+
+            for (var y = start; y < height; y += step) {
+                var rowBase = (top + y) * destWidth;
+
+                for (var x = 0; x < width; x++) {
+                    var index = indices[srcRow * width + x];
+                    if (index === transparentIndex) {
+                        continue;
+                    }
+                    var out = (rowBase + left + x) * 4;
+                    var colour = index * 3;
+                    dest[out] = palette[colour];
+                    dest[out + 1] = palette[colour + 1];
+                    dest[out + 2] = palette[colour + 2];
+                    dest[out + 3] = 255;
+                }
+                srcRow += 1;
+            }
+        }
+    }
+
+    function gifClearRect(dest, destWidth, rect) {
+        for (var y = rect.top; y < rect.top + rect.height; y++) {
+            var start = (y * destWidth + rect.left) * 4;
+            dest.fill(0, start, start + rect.width * 4);
+        }
+    }
+
+    function gifFlipRows(data, width, height) {
+        var stride = width * 4;
+        var out = new Uint8Array(data.length);
+        for (var y = 0; y < height; y++) {
+            out.set(data.subarray(y * stride, (y + 1) * stride),
+                (height - 1 - y) * stride);
+        }
+        return out;
+    }
+
+    function decodeGif(bytes) {
+        var p = 0;
+
+        function u8() {
+            return bytes[p++];
+        }
+
+        function u16() {
+            var value = bytes[p] | (bytes[p + 1] << 8);
+            p += 2;
+            return value;
+        }
+
+        function skipSubBlocks() {
+            var size;
+            while ((size = u8()) !== 0) {
+                p += size;
+            }
+        }
+
+        var signature = String.fromCharCode(bytes[0], bytes[1], bytes[2]);
+        if (signature !== 'GIF') {
+            throw new Error('Not a GIF');
+        }
+
+        p = 6;
+        var width = u16();
+        var height = u16();
+        var packed = u8();
+        u8(); // background colour index
+        u8(); // pixel aspect ratio
+
+        var globalPalette = null;
+        if (packed & 0x80) {
+            var globalSize = 2 << (packed & 7);
+            globalPalette = bytes.subarray(p, p + globalSize * 3);
+            p += globalSize * 3;
+        }
+
+        var canvas = new Uint8Array(width * height * 4);
+        var frames = [];
+        var disposal = 0;
+        var transparentIndex = -1;
+        var delay = 0;
+        var previousDisposal = -1;
+        var previousRect = null;
+        var saved = null;
+
+        while (p < bytes.length) {
+            var block = u8();
+
+            if (block === 0x3b) {
+                break;
+            }
+
+            if (block === 0x21) {
+                var label = u8();
+                if (label === 0xf9) {
+                    var size = u8();
+                    var flags = bytes[p];
+                    delay = bytes[p + 1] | (bytes[p + 2] << 8);
+                    transparentIndex = (flags & 0x01) ? bytes[p + 3] : -1;
+                    disposal = (flags >> 2) & 0x07;
+                    p += size;
+                    u8(); // terminator
+                } else {
+                    skipSubBlocks();
+                }
+                continue;
+            }
+
+            if (block !== 0x2c) {
+                throw new Error('Unsupported GIF block 0x' + block.toString(16));
+            }
+
+            var left = u16();
+            var top = u16();
+            var frameWidth = u16();
+            var frameHeight = u16();
+            var frameFlags = u8();
+            var palette = globalPalette;
+
+            if (frameFlags & 0x80) {
+                var localSize = 2 << (frameFlags & 7);
+                palette = bytes.subarray(p, p + localSize * 3);
+                p += localSize * 3;
+            }
+            if (!palette) {
+                throw new Error('GIF frame has no colour table');
+            }
+
+            var interlaced = (frameFlags & 0x40) !== 0;
+            var minCodeSize = u8();
+
+            // Image data is stored as a chain of sub-blocks; flatten it.
+            var total = 0;
+            var chunks = [];
+            var chunkSize;
+            while ((chunkSize = u8()) !== 0) {
+                chunks.push(bytes.subarray(p, p + chunkSize));
+                total += chunkSize;
+                p += chunkSize;
+            }
+            var compressed = new Uint8Array(total);
+            var offset = 0;
+            for (var c = 0; c < chunks.length; c++) {
+                compressed.set(chunks[c], offset);
+                offset += chunks[c].length;
+            }
+
+            var indices = lzwDecode(minCodeSize, compressed,
+                frameWidth * frameHeight);
+
+            // The previous frame's disposal is applied before this one.
+            if (previousDisposal === 2 && previousRect) {
+                gifClearRect(canvas, width, previousRect);
+            } else if (previousDisposal === 3 && saved) {
+                canvas.set(saved);
+            }
+            saved = disposal === 3 ? canvas.slice() : null;
+
+            gifDrawFrame(canvas, width, palette, indices, left, top,
+                frameWidth, frameHeight, transparentIndex, interlaced);
+
+            frames.push({
+                // Textures are sampled bottom-up; keep the data in that order.
+                data: gifFlipRows(canvas, width, height),
+                delay: delay > 0 ? delay * 10 : 100
+            });
+
+            previousDisposal = disposal;
+            previousRect = {
+                left: left, top: top, width: frameWidth, height: frameHeight
+            };
+            disposal = 0;
+            transparentIndex = -1;
+            delay = 0;
+        }
+
+        return { width: width, height: height, frames: frames };
+    }
+
+    /* ------------------------------------------------------------------
      * Hologram component
      * ------------------------------------------------------------------ */
     AFRAME.registerComponent('hologram-mural', {
@@ -268,104 +539,110 @@
             window.addEventListener('arjs-nft-init-data', this.onMarkerInfo);
 
             this.applyScale();
-            this.initLottie();
+            this.initGif();
         },
 
         /*
-         * Lottie overlay
-         * --------------
-         * The animation is rendered by lottie-web into an offscreen 2D canvas
-         * and uploaded as a texture. The shader above stays in place as a
-         * fallback if the player or the animation cannot load.
+         * GIF overlay
+         * -----------
+         * The animation is decoded into RGBA frames and uploaded as a
+         * DataTexture. The shader above stays in place as a fallback until the
+         * GIF is ready (or if it cannot be decoded).
          */
-        initLottie: function () {
+        initGif: function () {
             var self = this;
 
-            if (!window.lottie) {
-                return;
-            }
+            this.gifStarted = false;
+            this.gifElapsed = 0;
+            this.gifFrameIndex = -1;
+            this.gifHiddenAt = 0;
 
-            var container = document.createElement('div');
-            container.setAttribute('aria-hidden', 'true');
-            container.style.cssText = 'position:fixed;left:-10000px;top:0;' +
-                'width:768px;height:576px;overflow:hidden;pointer-events:none;';
-
-            var anim;
-            try {
-                anim = window.lottie.loadAnimation({
-                    container: container,
-                    renderer: 'canvas',
-                    loop: true,
-                    autoplay: false,
-                    path: 'assets/lottie/photo-iut.json',
-                    rendererSettings: {
-                        dpr: 1,
-                        clearCanvas: true,
-                        preserveAspectRatio: 'xMidYMid meet',
-                        imagePreserveAspectRatio: 'xMidYMid slice'
+            fetch(GIF_URL)
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
                     }
+                    return response.arrayBuffer();
+                })
+                .then(function (buffer) {
+                    return decodeGif(new Uint8Array(buffer));
+                })
+                .then(function (animation) {
+                    if (animation.frames.length) {
+                        self.setupGif(animation);
+                    }
+                })
+                .catch(function (error) {
+                    // Leave the hologram shader running.
+                    self.el.emit('hologram-gif-error', {
+                        src: GIF_URL,
+                        message: error && error.message
+                    });
                 });
-            } catch (err) {
+        },
+
+        setupGif: function (animation) {
+            if (!this.mesh) {
                 return;
             }
 
-            document.body.appendChild(container);
+            var first = animation.frames[0];
+            var texture = new THREE.DataTexture(
+                first.data,
+                animation.width,
+                animation.height,
+                THREE.RGBAFormat,
+                THREE.UnsignedByteType
+            );
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+            texture.generateMipmaps = false;
+            texture.needsUpdate = true;
 
-            this.lottieContainer = container;
-            this.lottieAnim = anim;
-            this.hiddenAt = 0;
-            this.lastLottieFrame = -1;
-            this.forceTextureUpload = true;
+            var material = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                opacity: 0,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                toneMapped: false
+            });
 
-            function activate() {
-                if (self.lottieTexture || !self.lottieAnim) {
-                    return;
-                }
+            this.gifFrames = animation.frames;
+            this.gifDuration = animation.frames.reduce(function (sum, frame) {
+                return sum + frame.delay;
+            }, 0);
+            this.gifTexture = texture;
+            this.gifMaterial = material;
+            this.gifStarted = false;
+            this.gifElapsed = 0;
+            this.gifFrameIndex = 0;
+            this.mesh.material = material;
+        },
 
-                var canvas = container.querySelector('canvas');
-                if (!canvas) {
-                    return;
-                }
+        advanceGif: function (delta) {
+            if (!this.gifStarted || !this.gifFrames || !this.gifDuration) {
+                return;
+            }
 
-                var texture = new THREE.CanvasTexture(canvas);
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.minFilter = THREE.LinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-                texture.generateMipmaps = false;
+            this.gifElapsed = (this.gifElapsed + delta) % this.gifDuration;
 
-                var material = new THREE.MeshBasicMaterial({
-                    map: texture,
-                    transparent: true,
-                    opacity: 0,
-                    depthWrite: false,
-                    side: THREE.DoubleSide,
-                    toneMapped: false
-                });
-
-                self.lottieTexture = texture;
-                self.lottieMaterial = material;
-                self.forceTextureUpload = true;
-                if (self.mesh) {
-                    self.mesh.material = material;
+            var rest = this.gifElapsed;
+            var index = 0;
+            for (var i = 0; i < this.gifFrames.length; i++) {
+                rest -= this.gifFrames[i].delay;
+                if (rest < 0) {
+                    index = i;
+                    break;
                 }
             }
 
-            anim.addEventListener('DOMLoaded', activate);
-            anim.addEventListener('loaded', activate);
-
-            anim.addEventListener('data_failed', function () {
-                // Leave the hologram shader running.
-                if (self.lottieAnim === anim) {
-                    self.lottieAnim = null;
-                }
-                anim.destroy();
-                if (container.parentNode) {
-                    container.parentNode.removeChild(container);
-                }
-                if (self.lottieContainer === container) {
-                    self.lottieContainer = null;
-                }
-            });
+            if (index !== this.gifFrameIndex) {
+                this.gifFrameIndex = index;
+                this.gifTexture.image.data = this.gifFrames[index].data;
+                this.gifTexture.needsUpdate = true;
+            }
         },
 
         update: function (oldData) {
@@ -403,48 +680,28 @@
                 this.uniforms.uTime.value = time / 1000;
             }
 
-            if (this.lottieMaterial) {
-                // The player can finish loading after the marker is already
-                // on screen; start it then, outside the visibility edge below.
-                if (parentVisible && this.lottieAnim && !this.lottieStarted) {
-                    this.lottieStarted = true;
-                    this.lottieMaterial.opacity = 0;
-                    this.forceTextureUpload = true;
-                    this.lottieAnim.goToAndPlay(0, true);
+            if (this.gifMaterial) {
+                // The GIF can finish decoding after the marker is already on
+                // screen; start it then, outside the visibility edge below.
+                if (parentVisible && !this.gifStarted) {
+                    this.gifStarted = true;
+                    this.gifMaterial.opacity = 0;
+                    this.gifElapsed = 0;
+                    this.gifFrameIndex = -1;
                 } else if (parentVisible && !this.wasVisible) {
-                    // Re-detected: start from the top unless the marker only
-                    // blinked out for a moment.
-                    this.lottieStarted = true;
-                    this.lottieMaterial.opacity = 0;
-                    this.forceTextureUpload = true;
-                    if (this.lottieAnim) {
-                        if (!this.hiddenAt || time - this.hiddenAt > 1500) {
-                            this.lottieAnim.goToAndPlay(0, true);
-                        } else {
-                            this.lottieAnim.play();
-                        }
+                    // Re-detected: restart unless the marker only blinked out.
+                    if (!this.gifHiddenAt || time - this.gifHiddenAt > 1500) {
+                        this.gifElapsed = 0;
                     }
+                    this.gifMaterial.opacity = 0;
+                    this.gifFrameIndex = -1;
                 } else if (!parentVisible && this.wasVisible) {
-                    this.hiddenAt = time;
-                    if (this.lottieAnim) {
-                        this.lottieAnim.pause();
-                    }
+                    this.gifHiddenAt = time;
                 }
 
                 if (parentVisible) {
-                    this.lottieMaterial.opacity +=
-                        (1 - this.lottieMaterial.opacity) * step;
-
-                    if (this.lottieAnim && this.lottieTexture) {
-                        // The animation runs at 30 fps; upload at most once per
-                        // animation frame instead of every AR frame.
-                        var frame = Math.floor(this.lottieAnim.currentFrame);
-                        if (this.forceTextureUpload || frame !== this.lastLottieFrame) {
-                            this.forceTextureUpload = false;
-                            this.lastLottieFrame = frame;
-                            this.lottieTexture.needsUpdate = true;
-                        }
-                    }
+                    this.gifMaterial.opacity += (1 - this.gifMaterial.opacity) * step;
+                    this.advanceGif(delta || 16);
                 }
 
                 this.wasVisible = parentVisible;
@@ -463,19 +720,13 @@
 
         remove: function () {
             window.removeEventListener('arjs-nft-init-data', this.onMarkerInfo);
-            if (this.lottieAnim) {
-                this.lottieAnim.destroy();
-                this.lottieAnim = null;
-            }
-            if (this.lottieContainer && this.lottieContainer.parentNode) {
-                this.lottieContainer.parentNode.removeChild(this.lottieContainer);
-            }
+            this.gifFrames = null;
             if (this.mesh) {
                 this.mesh.geometry.dispose();
             }
             if (this.shaderMaterial) this.shaderMaterial.dispose();
-            if (this.lottieMaterial) this.lottieMaterial.dispose();
-            if (this.lottieTexture) this.lottieTexture.dispose();
+            if (this.gifMaterial) this.gifMaterial.dispose();
+            if (this.gifTexture) this.gifTexture.dispose();
             if (this.photoTexture) this.photoTexture.dispose();
             if (this.edgeTexture) this.edgeTexture.dispose();
         }

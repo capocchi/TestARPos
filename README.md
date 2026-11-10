@@ -1,6 +1,6 @@
 # STUDIÀ LIBERTÀ · AR mural
 
-A web-based augmented reality piece built with [AR.js](https://ar-js-org.github.io/AR.js-Docs/) **NFT image tracking**. Point a phone (or a webcam) at the printed **STUDIÀ LIBERTÀ** mural and the same artwork comes alive in place: a holographic shader layer with neon contours, scan bands, drifting sparkles, and orbiting targeting arcs.
+A web-based augmented reality piece built with [AR.js](https://ar-js-org.github.io/AR.js-Docs/) **NFT image tracking**. Point a phone (or a webcam) at the printed **STUDIÀ LIBERTÀ** mural and an animated version of the artwork plays back exactly over the print, with drifting sparkles and orbiting targeting arcs around it.
 
 No build step, no 3D models — just static HTML, CSS, and JavaScript.
 
@@ -11,19 +11,19 @@ No build step, no 3D models — just static HTML, CSS, and JavaScript.
 ```
 index.html                     AR scene + HUD markup
 assets/
-  app.js                       A-Frame components, Lottie overlay, shader fallback, HUD logic
+  app.js                       A-Frame components, GIF overlay, shader fallback, HUD logic
   style.css                    HUD / loader / calibration panel styling
   photo-iut.jpg                The mural image used as the NFT target
   photo-iut-edges.png          Baked edge map (neon contour glow, shader fallback)
-  lottie/
-    photo-iut.json             Animated AR layer (4 s loop)
+  Mural_STUDIA_LIBERTA_en_animation.gif
+                               Animated AR layer (438 × 389, 9 frames, 1.62 s loop)
   nft/
     photo-iut.fset             NFT marker feature set
     photo-iut.fset3            NFT marker feature set (multi-scale)
     photo-iut.iset             NFT marker image set
 ```
 
-The scene loads A-Frame 1.6.0, AR.js 3.4.8, and lottie-web 5.12.2 from a CDN.
+The scene loads A-Frame 1.6.0 and AR.js 3.4.8 from a CDN.
 
 ---
 
@@ -54,7 +54,7 @@ Opening the app on a phone over plain `http://192.168.x.x:8080` will load, but t
 
 1. Allow the camera when prompted.
 2. Point the camera at the mural so the whole print is in view, then hold still.
-3. When tracking locks, the Lottie layer fades in exactly over the artwork and plays from the start.
+3. When tracking locks, the animation fades in exactly over the artwork and plays from the start.
 
 The **Tune overlay** button (bottom right) opens a small calibration panel:
 
@@ -89,27 +89,24 @@ The tool writes `<name>.fset`, `<name>.fset3`, and `<name>.iset` and prints a co
 ## How it works
 
 - `<a-nft>` performs natural feature tracking and exposes a pose for the marker.
-- `hologram-mural` owns the tracked plane. Its main layer is a **Lottie animation** rendered offscreen by lottie-web and uploaded as a `CanvasTexture`:
-  - the mural photo as the base, with a slow breathe,
-  - a scan sweep, a lock-on ring, accent arcs that draw on, and twinkling points,
-  - restart on detection (short tracking blinks resume instead of restarting),
-  - the texture is uploaded only when the Lottie advances a frame.
-- If lottie-web or the JSON cannot load, the component keeps its original `ShaderMaterial` (photo + neon edge map, scan bands, CRT texture) as a fallback, so tracking still shows something.
+- `hologram-mural` owns the tracked plane. Its main layer is the supplied **animated GIF**, decoded once into RGBA frames and uploaded as a `DataTexture`:
+  - `drawImage()` only ever returns an animated GIF's first frame, so `app.js` ships a small GIF decoder (palettes, transparency, interlacing, disposal modes) and plays the frames on its own clock;
+  - 9 frames at 180 ms each, looped every 1.62 s, stretched to the 4:3 marker plane (the GIF's artwork was authored slightly taller than 4:3, so this is what lines up with the print);
+  - the texture changes only when the animation advances a frame (about 5.5 uploads/s), not on every AR frame;
+  - starts from frame 0 on detection; a short tracking blink (under 1.5 s) resumes where it left off, while a longer loss restarts it.
+- Until the GIF has downloaded and decoded, or if it cannot be decoded, the component keeps its original `ShaderMaterial` (photo + neon edge map, scan bands, CRT texture) so tracking still shows something.
 - `ar-sparkles`, `ar-rings`, and `ar-brackets` add procedural points, rotating arcs, and pulsing corner marks — all scaled to the marker.
 - A small renderer hook corrects AR.js's projection for non-4:3 viewports (see below).
 
-### Editing the Lottie animation
+### Replacing the animation
 
-The animation lives in `assets/lottie/photo-iut.json` (768 × 576, 4:3, 30 fps, 4 s loop). It references the mural photo as a Lottie image asset via `"u": "../", "p": "photo-iut.jpg"`, so the plane stays aligned with the print. Its photo layer fills the canvas edge to edge — keep that if you replace the artwork.
+The animation is `assets/Mural_STUDIA_LIBERTA_en_animation.gif` (438 × 389, 9 frames, 180 ms per frame). Anything that decodes as a GIF works:
 
-To use a different animation:
+1. Drop a new GIF in `assets/` and point `GIF_URL` in `assets/app.js` at it.
+2. Keep the artwork registered with the print — the GIF is mapped edge to edge across the tracked plane, so its framing must match `photo-iut.jpg` (a slightly different aspect ratio is fine and is stretched to 4:3).
+3. The `Fit` slider in the overlay panel absorbs any remaining offset.
 
-1. Export it at a 4:3 size (e.g. 768 × 576) with a transparent background and no camera/3D layers (lottie-web's canvas renderer is used).
-2. Save it as `assets/lottie/photo-iut.json` — or change the `path` in `initLottie()` in `assets/app.js`.
-3. If it embeds the mural as an image, point the asset at `../photo-iut.jpg` (or embed it as a data URI).
-4. Keep the loop seamless — the layer fades in on detection and loops while the marker is visible.
-
-The player is loaded from jsDelivr (`lottie-web@5.12.2`) in `index.html`.
+There is no player library and no build step; the decoder is part of `app.js` and works in every browser that supports WebGL/canvas.
 
 ### AR.js 3.4.8 integration notes
 
