@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+</head>
+
+<body style="margin: 0; overflow: hidden;">
+    <div id="gps-hud">
+        <div class="gps-hud-title">CURRENT GPS POSITION</div>
+        <div class="gps-hud-row"><span class="gps-hud-label">Lat</span><span class="gps-hud-value" id="gps-lat">--</span></div>
+        <div class="gps-hud-row"><span class="gps-hud-label">Lon</span><span class="gps-hud-value" id="gps-lon">--</span></div>
+        <div class="gps-hud-row"><span class="gps-hud-label">Acc</span><span class="gps-hud-value" id="gps-acc">--</span></div>
+        <div class="gps-hud-row"><span class="gps-hud-label">Alt</span><span class="gps-hud-value" id="gps-alt">--</span></div>
+        <div class="gps-hud-status" id="gps-status">waiting for GPS…</div>
+    </div>
+
+    <style>
+        #gps-hud {
+            position: fixed;
+            top: calc(12px + env(safe-area-inset-top, 0px));
+            left: calc(12px + env(safe-area-inset-left, 0px));
+            z-index: 9999;
+            pointer-events: none;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #fff;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.45;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        .gps-hud-title {
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            opacity: 0.75;
+            margin-bottom: 4px;
+        }
+
+        .gps-hud-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .gps-hud-label {
+            opacity: 0.7;
+        }
+
+        .gps-hud-value {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .gps-hud-status {
+            margin-top: 4px;
+            font-size: 10px;
+            opacity: 0.7;
+        }
+
+        .gps-hud-status.gps-error {
+            color: #ff8989;
+            opacity: 1;
+        }
+    </style>
+
+    <a-scene embedded loading-screen="enabled: false;" arjs="sourceType: webcam; debugUIEnabled: false;">
+        <a-image src="assets/asset.jpeg" look-at="[gps-camera]" scale="1 1 1"
+            gps-entity-place="latitude: 42.2974; longitude: 9.1545;"></a-image>
+
+        <a-image src="assets/asset.jpeg" look-at="[gps-camera]" scale="1 1 1"
+            gps-entity-place="latitude: 42.297445; longitude: 9.1545;"></a-image>
+
+        <a-image src="assets/asset.jpeg" look-at="[gps-camera]" scale="1 1 1"
+            gps-entity-place="latitude: 42.297355; longitude: 9.1545;"></a-image>
+
+        <a-image src="assets/asset.jpeg" look-at="[gps-camera]" scale="1 1 1"
+            gps-entity-place="latitude: 42.2974; longitude: 9.15456;"></a-image>
+
+        <a-image src="assets/asset.jpeg" look-at="[gps-camera]" scale="1 1 1"
+            gps-entity-place="latitude: 42.2974; longitude: 9.15444;"></a-image>
+
+        <a-camera gps-camera="
+                    gpsMinDistance: 1;
+                    positionMinAccuracy: 100;
+                    gpsTimeInterval: 1000;
+                " rotation-reader></a-camera>
+    </a-scene>
+
+    <script>
+        (function () {
+            var latEl = document.getElementById('gps-lat');
+            var lonEl = document.getElementById('gps-lon');
+            var accEl = document.getElementById('gps-acc');
+            var altEl = document.getElementById('gps-alt');
+            var statusEl = document.getElementById('gps-status');
+
+            function formatCoord(value, positive, negative) {
+                return value.toFixed(6) + '° ' + (value >= 0 ? positive : negative);
+            }
+
+            function setStatus(text, isError) {
+                statusEl.textContent = text;
+                statusEl.classList.toggle('gps-error', !!isError);
+            }
+
+            if (!navigator.geolocation) {
+                setStatus('geolocation not supported', true);
+                return;
+            }
+
+            function onPosition(position) {
+                var coords = position.coords;
+
+                latEl.textContent = formatCoord(coords.latitude, 'N', 'S');
+                lonEl.textContent = formatCoord(coords.longitude, 'E', 'W');
+                accEl.textContent = Number.isFinite(coords.accuracy)
+                    ? '±' + Math.round(coords.accuracy) + ' m'
+                    : '--';
+                altEl.textContent = Number.isFinite(coords.altitude)
+                    ? Math.round(coords.altitude) + ' m'
+                    : '--';
+
+                var time = new Date(position.timestamp).toLocaleTimeString();
+                setStatus('updated ' + time);
+            }
+
+            function onError(error) {
+                var messages = {
+                    1: 'permission denied',
+                    2: 'position unavailable',
+                    3: 'timed out'
+                };
+                setStatus('GPS error: ' + (messages[error.code] || error.message), true);
+            }
+
+            statusEl.textContent = 'locating…';
+
+            navigator.geolocation.watchPosition(onPosition, onError, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 15000
+            });
+        })();
+    </script>
+</body>
+
+</html>
