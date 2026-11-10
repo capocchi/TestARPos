@@ -6,6 +6,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
     <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <script>
+        // AR.js 3.4.x calls THREE.MathUtils, which does not exist in the three.js
+        // version bundled with A-Frame 1.0.4 (there it is THREE.Math). Without this
+        // alias, gps-camera throws on every GPS update and never sets its origin,
+        // leaving all gps-entity-place markers unanchored.
+        if (window.AFRAME && AFRAME.THREE && !AFRAME.THREE.MathUtils) {
+            AFRAME.THREE.MathUtils = AFRAME.THREE.Math || {};
+        }
+    </script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 
@@ -25,7 +34,7 @@
             <div class="gps-hud-row"><span class="gps-hud-label">Target</span><span class="gps-hud-value" id="marker-coords">42.297470, 9.154552</span></div>
             <div class="gps-hud-row"><span class="gps-hud-label">Spec</span><span class="gps-hud-value" id="marker-spec">±6 m · 496 m</span></div>
             <div class="gps-hud-row"><span class="gps-hud-label">JPEG</span><span class="gps-hud-value" id="marker-asset">loading…</span></div>
-            <div class="gps-hud-row"><span class="gps-hud-label">Distance</span><span class="gps-hud-value" id="marker-distance">--</span></div>
+            <div class="gps-hud-row"><span class="gps-hud-label">To point</span><span class="gps-hud-value" id="marker-distance">--</span></div>
             <div class="gps-hud-status" id="marker-status">waiting for scene…</div>
         </div>
     </div>
@@ -108,9 +117,12 @@
             <img id="marker-texture" src="assets/asset.jpeg">
         </a-assets>
 
-        <!-- Single JPEG anchored at the measured position; altitude is metadata only
-             because AR.js gps-entity-place supports latitude/longitude only. -->
-        <a-image id="ar-marker" src="#marker-texture" look-at="[gps-camera]" scale="1 1 1"
+        <!-- Central JPEG plus a generated ring of copies around the point, so the
+             marker is visible across a region instead of at one exact spot.
+             AR.js gps-entity-place supports latitude/longitude only, so altitude
+             is reported as metadata. -->
+        <a-image id="ar-marker" src="#marker-texture" look-at="[gps-camera]" scale="6 6 1"
+            material="side: double"
             gps-entity-place="latitude: 42.297470; longitude: 9.154552;"
             data-target-accuracy="6" data-target-altitude="496"></a-image>
 
@@ -130,6 +142,13 @@
                 altitude: 496
             };
 
+            // Visibility region: copies of the JPEG arranged in a ring around the
+            // target, so the marker can be seen before reaching the exact point.
+            var RING_COUNT = 8;
+            var RING_RADIUS_M = 12;
+            var RING_MARKER_SCALE = 4;
+            var CENTER_MARKER_SCALE = 6;
+
             var latEl = document.getElementById('gps-lat');
             var lonEl = document.getElementById('gps-lon');
             var accEl = document.getElementById('gps-acc');
@@ -142,6 +161,9 @@
             var assetEl = document.getElementById('marker-asset');
             var distanceEl = document.getElementById('marker-distance');
             var markerStatusEl = document.getElementById('marker-status');
+
+            var markerEls = [markerEl];
+            var anchoredMarkers = {};
 
             var textureLoaded = false;
             var anchored = false;
@@ -217,6 +239,79 @@
                 verifyPlacement();
             }
 
+            function offsetCoords(latitude, longitude, distanceMeters, bearingRad) {
+                var R = 6378137;
+                var dLat = (distanceMeters * Math.cos(bearingRad)) / R;
+                var dLon = (distanceMeters * Math.sin(bearingRad)) /
+                    (R * Math.cos(latitude * Math.PI / 180));
+                return {
+                    latitude: latitude + (dLat * 180) / Math.PI,
+                    longitude: longitude + (dLon * 180) / Math.PI
+                };
+            }
+
+            function createMarkerEl(latitude, longitude, scale, role) {
+                var el = document.createElement('a-image');
+                el.setAttribute('src', '#marker-texture');
+                el.setAttribute('look-at', '[gps-camera]');
+                el.setAttribute('scale', scale + ' ' + scale + ' 1');
+                el.setAttribute('material', 'side: double');
+                el.setAttribute('gps-entity-place',
+                    'latitude: ' + latitude + '; longitude: ' + longitude + ';');
+                el.setAttribute('data-role', role);
+                return el;
+            }
+
+            function buildMarkerRing() {
+                var sceneEl = document.querySelector('a-scene');
+                if (!sceneEl) return;
+                for (var i = 0; i < RING_COUNT; i++) {
+                    var bearing = (i / RING_COUNT) * Math.PI * 2;
+                    var pos = offsetCoords(
+                        TARGET.latitude,
+                        TARGET.longitude,
+                        RING_RADIUS_M,
+                        bearing
+                    );
+                    var el = createMarkerEl(pos.latitude, pos.longitude, RING_MARKER_SCALE, 'ring');
+                    el.id = 'ar-marker-ring-' + i;
+                    el.addEventListener('gps-entity-place-update-position', onMarkerAnchored);
+                    sceneEl.appendChild(el);
+                    markerEls.push(el);
+                }
+            }
+
+            function onMarkerAnchored(event) {
+                var el = event.target;
+                if (el && el.id) anchoredMarkers[el.id] = true;
+                anchored = true;
+                verifyPlacement();
+            }
+
+            function cameraHasOrigin() {
+                var camEl = document.querySelector('[gps-camera]');
+                var comp = camEl && camEl.components && camEl.components['gps-camera'];
+                return !!(comp && comp.originCoords);
+            }
+
+            function countAnchoredMarkers() {
+                var count = 0;
+                for (var i = 0; i < markerEls.length; i++) {
+                    var el = markerEls[i];
+                    if (anchoredMarkers[el.id]) {
+                        count += 1;
+                        continue;
+                    }
+                    // Fallback: the entity is anchored once the camera has an origin.
+                    var comp = el.components && el.components['gps-entity-place'];
+                    if (comp && comp._cameraGps && comp._cameraGps.originCoords) {
+                        anchoredMarkers[el.id] = true;
+                        count += 1;
+                    }
+                }
+                return count;
+            }
+
             function verifyPlacement() {
                 var comp = markerEl.components && markerEl.components['gps-entity-place'];
                 var info = textureInfo();
@@ -236,7 +331,8 @@
                     Math.abs(lon - TARGET.longitude) < 1e-7;
 
                 coordsEl.textContent = lat.toFixed(6) + ', ' + lon.toFixed(6);
-                specEl.textContent = '±' + TARGET.accuracy + ' m · alt ' + TARGET.altitude + ' m';
+                specEl.textContent = '±' + TARGET.accuracy + ' m · alt ' + TARGET.altitude +
+                    ' m · ring ' + RING_RADIUS_M + ' m';
 
                 if (!coordsMatch) {
                     setMarkerStatus('coordinate mismatch', 'gps-error');
@@ -246,26 +342,36 @@
                     setMarkerStatus('loading JPEG…');
                     return;
                 }
+
+                // AR.js only anchors entities once the camera has a GPS origin.
+                if (!anchored && cameraHasOrigin()) {
+                    anchored = true;
+                }
                 if (!anchored) {
-                    setMarkerStatus('JPEG loaded, waiting for GPS anchor…');
+                    setMarkerStatus('JPEG loaded, waiting for GPS fix…');
                     return;
                 }
 
-                var pos = markerEl.object3D.position;
+                var anchoredCount = countAnchoredMarkers();
                 setMarkerStatus(
-                    'loaded & anchored ✓ (' + pos.x.toFixed(1) + ', ' + pos.z.toFixed(1) + ')',
+                    'loaded & anchored ✓ (' + anchoredCount + '/' + markerEls.length + ' markers)',
                     'gps-ok'
                 );
             }
 
             // AR.js dispatches this once the marker has a world position.
-            markerEl.addEventListener('gps-entity-place-update-position', function (event) {
-                anchored = true;
-                if (event.detail && Number.isFinite(event.detail.distance)) {
-                    distanceEl.textContent = formatDistance(event.detail.distance);
-                }
-                verifyPlacement();
-            });
+            markerEl.addEventListener('gps-entity-place-update-position', onMarkerAnchored);
+
+            markerEl.setAttribute('scale', CENTER_MARKER_SCALE + ' ' + CENTER_MARKER_SCALE + ' 1');
+
+            // Add the ring only after A-Frame initialized the scene, so the new
+            // entities get a GPS camera to anchor against immediately.
+            var sceneEl = document.querySelector('a-scene');
+            if (sceneEl.hasLoaded) {
+                buildMarkerRing();
+            } else {
+                sceneEl.addEventListener('loaded', buildMarkerRing);
+            }
 
             if (markerEl.hasLoaded) {
                 verifyPlacement();
