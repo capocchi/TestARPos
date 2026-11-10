@@ -205,6 +205,7 @@
             mesh.frustumCulled = false;
 
             this.mesh = mesh;
+            this.shaderMaterial = material;
             this.el.setObject3D('hologram', mesh);
 
             // AR.js converts ARToolkit's Z-up frame into Y-up: inside a-nft
@@ -267,6 +268,104 @@
             window.addEventListener('arjs-nft-init-data', this.onMarkerInfo);
 
             this.applyScale();
+            this.initLottie();
+        },
+
+        /*
+         * Lottie overlay
+         * --------------
+         * The animation is rendered by lottie-web into an offscreen 2D canvas
+         * and uploaded as a texture. The shader above stays in place as a
+         * fallback if the player or the animation cannot load.
+         */
+        initLottie: function () {
+            var self = this;
+
+            if (!window.lottie) {
+                return;
+            }
+
+            var container = document.createElement('div');
+            container.setAttribute('aria-hidden', 'true');
+            container.style.cssText = 'position:fixed;left:-10000px;top:0;' +
+                'width:768px;height:576px;overflow:hidden;pointer-events:none;';
+
+            var anim;
+            try {
+                anim = window.lottie.loadAnimation({
+                    container: container,
+                    renderer: 'canvas',
+                    loop: true,
+                    autoplay: false,
+                    path: 'assets/lottie/photo-iut.json',
+                    rendererSettings: {
+                        dpr: 1,
+                        clearCanvas: true,
+                        preserveAspectRatio: 'xMidYMid meet',
+                        imagePreserveAspectRatio: 'xMidYMid slice'
+                    }
+                });
+            } catch (err) {
+                return;
+            }
+
+            document.body.appendChild(container);
+
+            this.lottieContainer = container;
+            this.lottieAnim = anim;
+            this.hiddenAt = 0;
+            this.lastLottieFrame = -1;
+            this.forceTextureUpload = true;
+
+            function activate() {
+                if (self.lottieTexture || !self.lottieAnim) {
+                    return;
+                }
+
+                var canvas = container.querySelector('canvas');
+                if (!canvas) {
+                    return;
+                }
+
+                var texture = new THREE.CanvasTexture(canvas);
+                texture.colorSpace = THREE.SRGBColorSpace;
+                texture.minFilter = THREE.LinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.generateMipmaps = false;
+
+                var material = new THREE.MeshBasicMaterial({
+                    map: texture,
+                    transparent: true,
+                    opacity: 0,
+                    depthWrite: false,
+                    side: THREE.DoubleSide,
+                    toneMapped: false
+                });
+
+                self.lottieTexture = texture;
+                self.lottieMaterial = material;
+                self.forceTextureUpload = true;
+                if (self.mesh) {
+                    self.mesh.material = material;
+                }
+            }
+
+            anim.addEventListener('DOMLoaded', activate);
+            anim.addEventListener('loaded', activate);
+
+            anim.addEventListener('data_failed', function () {
+                // Leave the hologram shader running.
+                if (self.lottieAnim === anim) {
+                    self.lottieAnim = null;
+                }
+                anim.destroy();
+                if (container.parentNode) {
+                    container.parentNode.removeChild(container);
+                }
+                if (self.lottieContainer === container) {
+                    self.lottieContainer = null;
+                }
+            });
         },
 
         update: function (oldData) {
@@ -297,30 +396,86 @@
         },
 
         tick: function (time, delta) {
-            if (!this.uniforms) {
+            var parentVisible = !this.el.parentEl || this.el.parentEl.object3D.visible;
+            var step = Math.min(1, (delta || 16) * 0.006);
+
+            if (this.uniforms) {
+                this.uniforms.uTime.value = time / 1000;
+            }
+
+            if (this.lottieMaterial) {
+                // The player can finish loading after the marker is already
+                // on screen; start it then, outside the visibility edge below.
+                if (parentVisible && this.lottieAnim && !this.lottieStarted) {
+                    this.lottieStarted = true;
+                    this.lottieMaterial.opacity = 0;
+                    this.forceTextureUpload = true;
+                    this.lottieAnim.goToAndPlay(0, true);
+                } else if (parentVisible && !this.wasVisible) {
+                    // Re-detected: start from the top unless the marker only
+                    // blinked out for a moment.
+                    this.lottieStarted = true;
+                    this.lottieMaterial.opacity = 0;
+                    this.forceTextureUpload = true;
+                    if (this.lottieAnim) {
+                        if (!this.hiddenAt || time - this.hiddenAt > 1500) {
+                            this.lottieAnim.goToAndPlay(0, true);
+                        } else {
+                            this.lottieAnim.play();
+                        }
+                    }
+                } else if (!parentVisible && this.wasVisible) {
+                    this.hiddenAt = time;
+                    if (this.lottieAnim) {
+                        this.lottieAnim.pause();
+                    }
+                }
+
+                if (parentVisible) {
+                    this.lottieMaterial.opacity +=
+                        (1 - this.lottieMaterial.opacity) * step;
+
+                    if (this.lottieAnim && this.lottieTexture) {
+                        // The animation runs at 30 fps; upload at most once per
+                        // animation frame instead of every AR frame.
+                        var frame = Math.floor(this.lottieAnim.currentFrame);
+                        if (this.forceTextureUpload || frame !== this.lastLottieFrame) {
+                            this.forceTextureUpload = false;
+                            this.lastLottieFrame = frame;
+                            this.lottieTexture.needsUpdate = true;
+                        }
+                    }
+                }
+
+                this.wasVisible = parentVisible;
                 return;
             }
 
-            this.uniforms.uTime.value = time / 1000;
-
-            var parentVisible = !this.el.parentEl || this.el.parentEl.object3D.visible;
             if (parentVisible && !this.wasVisible) {
                 this.uniforms.uOpacity.value = 0;
             }
             this.wasVisible = parentVisible;
 
             if (parentVisible && this.ready) {
-                var step = Math.min(1, (delta || 16) * 0.006);
                 this.uniforms.uOpacity.value += (1 - this.uniforms.uOpacity.value) * step;
             }
         },
 
         remove: function () {
             window.removeEventListener('arjs-nft-init-data', this.onMarkerInfo);
+            if (this.lottieAnim) {
+                this.lottieAnim.destroy();
+                this.lottieAnim = null;
+            }
+            if (this.lottieContainer && this.lottieContainer.parentNode) {
+                this.lottieContainer.parentNode.removeChild(this.lottieContainer);
+            }
             if (this.mesh) {
                 this.mesh.geometry.dispose();
-                this.mesh.material.dispose();
             }
+            if (this.shaderMaterial) this.shaderMaterial.dispose();
+            if (this.lottieMaterial) this.lottieMaterial.dispose();
+            if (this.lottieTexture) this.lottieTexture.dispose();
             if (this.photoTexture) this.photoTexture.dispose();
             if (this.edgeTexture) this.edgeTexture.dispose();
         }

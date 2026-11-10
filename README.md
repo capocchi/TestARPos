@@ -11,17 +11,19 @@ No build step, no 3D models — just static HTML, CSS, and JavaScript.
 ```
 index.html                     AR scene + HUD markup
 assets/
-  app.js                       A-Frame components, holographic shader, HUD logic
+  app.js                       A-Frame components, Lottie overlay, shader fallback, HUD logic
   style.css                    HUD / loader / calibration panel styling
   photo-iut.jpg                The mural image used as the NFT target
-  photo-iut-edges.png          Baked edge map (neon contour glow)
+  photo-iut-edges.png          Baked edge map (neon contour glow, shader fallback)
+  lottie/
+    photo-iut.json             Animated AR layer (4 s loop)
   nft/
     photo-iut.fset             NFT marker feature set
     photo-iut.fset3            NFT marker feature set (multi-scale)
     photo-iut.iset             NFT marker image set
 ```
 
-The scene loads A-Frame 1.6.0 and AR.js 3.4.8 from a CDN.
+The scene loads A-Frame 1.6.0, AR.js 3.4.8, and lottie-web 5.12.2 from a CDN.
 
 ---
 
@@ -52,12 +54,12 @@ Opening the app on a phone over plain `http://192.168.x.x:8080` will load, but t
 
 1. Allow the camera when prompted.
 2. Point the camera at the mural so the whole print is in view, then hold still.
-3. When tracking locks, the holographic layer fades in exactly over the artwork.
+3. When tracking locks, the Lottie layer fades in exactly over the artwork and plays from the start.
 
 The **Tune overlay** button (bottom right) opens a small calibration panel:
 
 - **Fit (85–115%)** — nudges the overlay size if it does not sit exactly on the print on your device.
-- **Hologram effects** — turns the shader animation, sparkles, rings, and brackets off for a clean alignment check.
+- **Layer effects** — turns the extra sparkles, rings, and brackets off for a clean alignment check.
 
 Both preferences are stored in `localStorage`.
 
@@ -87,14 +89,27 @@ The tool writes `<name>.fset`, `<name>.fset3`, and `<name>.iset` and prints a co
 ## How it works
 
 - `<a-nft>` performs natural feature tracking and exposes a pose for the marker.
-- `hologram-mural` builds a `PlaneGeometry` with a custom `ShaderMaterial`:
-  - the mural photo with a cool grade and a barely-there breathing zoom,
-  - split-channel chromatic shimmer,
-  - the baked edge map turned into animated neon contours,
-  - travelling scan bands, fine CRT texture, and an inner rim light,
-  - a fade-in driven by tracking visibility.
+- `hologram-mural` owns the tracked plane. Its main layer is a **Lottie animation** rendered offscreen by lottie-web and uploaded as a `CanvasTexture`:
+  - the mural photo as the base, with a slow breathe,
+  - a scan sweep, a lock-on ring, accent arcs that draw on, and twinkling points,
+  - restart on detection (short tracking blinks resume instead of restarting),
+  - the texture is uploaded only when the Lottie advances a frame.
+- If lottie-web or the JSON cannot load, the component keeps its original `ShaderMaterial` (photo + neon edge map, scan bands, CRT texture) as a fallback, so tracking still shows something.
 - `ar-sparkles`, `ar-rings`, and `ar-brackets` add procedural points, rotating arcs, and pulsing corner marks — all scaled to the marker.
 - A small renderer hook corrects AR.js's projection for non-4:3 viewports (see below).
+
+### Editing the Lottie animation
+
+The animation lives in `assets/lottie/photo-iut.json` (768 × 576, 4:3, 30 fps, 4 s loop). It references the mural photo as a Lottie image asset via `"u": "../", "p": "photo-iut.jpg"`, so the plane stays aligned with the print. Its photo layer fills the canvas edge to edge — keep that if you replace the artwork.
+
+To use a different animation:
+
+1. Export it at a 4:3 size (e.g. 768 × 576) with a transparent background and no camera/3D layers (lottie-web's canvas renderer is used).
+2. Save it as `assets/lottie/photo-iut.json` — or change the `path` in `initLottie()` in `assets/app.js`.
+3. If it embeds the mural as an image, point the asset at `../photo-iut.jpg` (or embed it as a data URI).
+4. Keep the loop seamless — the layer fades in on detection and loops while the marker is visible.
+
+The player is loaded from jsDelivr (`lottie-web@5.12.2`) in `index.html`.
 
 ### AR.js 3.4.8 integration notes
 
