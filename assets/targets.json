@@ -1,25 +1,7 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-10T15:51:50.272Z",
+  "updatedAt": "2026-11-10T16:01:55.761Z",
   "targets": [
-    {
-      "id": "photo-iut",
-      "title": "STUDIÀ LIBERTÀ",
-      "image": "assets/targets/photo-iut/image.jpg",
-      "animation": "assets/targets/photo-iut/animation.gif",
-      "edges": "assets/targets/photo-iut/edges.png",
-      "marker": "assets/targets/photo-iut/marker",
-      "width": 2048,
-      "height": 1536,
-      "dpi": 72,
-      "widthMm": 722.488,
-      "heightMm": 541.866,
-      "autoAnimation": false,
-      "animationWidth": 438,
-      "animationHeight": 389,
-      "animationFrames": 9,
-      "createdAt": "2026-11-10T00:00:00.000Z"
-    },
     {
       "id": "image",
       "title": "image",
@@ -38,6 +20,25 @@
       "animationFrames": null,
       "createdAt": "2026-11-10T15:51:50.271Z",
       "notice": "The animation is 414×411 but the image is 768×1024; it will be stretched to fill the print."
+    },
+    {
+      "id": "photo",
+      "title": "photo",
+      "image": "assets/targets/photo/image.jpg",
+      "animation": "assets/targets/photo/animation.gif",
+      "edges": "assets/targets/photo/edges.png",
+      "marker": "assets/targets/photo/marker",
+      "width": 2048,
+      "height": 1536,
+      "dpi": 72,
+      "widthMm": 722.489,
+      "heightMm": 541.867,
+      "autoAnimation": false,
+      "animationWidth": 414,
+      "animationHeight": 409,
+      "animationFrames": null,
+      "createdAt": "2026-11-10T16:01:55.760Z",
+      "notice": "The animation is 414×409 but the image is 2048×1536; it will be stretched to fill the print."
     }
   ]
 }
