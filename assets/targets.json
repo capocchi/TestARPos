@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-10T16:04:01.556Z",
+  "updatedAt": "2026-11-10T16:15:27.396Z",
   "targets": [
     {
       "id": "image",
@@ -41,22 +41,23 @@
       "notice": "The animation is 414×409 but the image is 2048×1536; it will be stretched to fill the print."
     },
     {
-      "id": "img-9765",
-      "title": "IMG 9765",
-      "image": "assets/targets/img-9765/image.jpg",
-      "animation": "assets/targets/img-9765/animation.gif",
-      "edges": "assets/targets/img-9765/edges.png",
-      "marker": "assets/targets/img-9765/marker",
-      "width": 1280,
-      "height": 960,
+      "id": "img-9766",
+      "title": "IMG 9766",
+      "image": "assets/targets/img-9766/image.jpg",
+      "animation": "assets/targets/img-9766/animation.gif",
+      "edges": "assets/targets/img-9766/edges.png",
+      "marker": "assets/targets/img-9766/marker",
+      "width": 2048,
+      "height": 1536,
       "dpi": 72,
-      "widthMm": 451.556,
-      "heightMm": 338.667,
+      "widthMm": 722.489,
+      "heightMm": 541.867,
       "autoAnimation": false,
-      "animationWidth": 1280,
-      "animationHeight": 960,
+      "animationWidth": 438,
+      "animationHeight": 385,
       "animationFrames": null,
-      "createdAt": "2026-11-10T16:04:01.556Z"
+      "createdAt": "2026-11-10T16:15:27.395Z",
+      "notice": "The animation is 438×385 but the image is 2048×1536; it will be stretched to fill the print."
     }
   ]
 }
