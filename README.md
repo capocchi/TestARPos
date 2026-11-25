@@ -8,6 +8,16 @@ The AR experience itself is still plain static HTML, CSS, and JavaScript. The ba
 
 ---
 
+## Live demo
+
+Scan this QR code with your phone to open the AR experience, or click it to open the link:
+
+[![QR code linking to the live demo](assets/qrcode-live-demo.png)](https://capocchi.github.io/TestARPos/)
+
+<https://capocchi.github.io/TestARPos/>
+
+---
+
 ## What's here
 
 ```
@@ -15,6 +25,7 @@ index.html                     AR scene + HUD markup (targets are created at run
 assets/
   app.js                       A-Frame components, GIF decoder/overlay, shader fallback, HUD
   style.css                    HUD / loader / calibration panel styling
+  qrcode-live-demo.png         QR code for the live demo link
   targets.json                 Manifest of scannable couples (written by the backoffice)
   targets/
     photo-iut/                 One couple = one folder
